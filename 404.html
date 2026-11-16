@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8">
+  <title>লোড হচ্ছে… · উদ্যোক্তা গ্রাফিক্স AI</title>
+  <script>
+    (function () {
+      var p = location.pathname;
+      if (p.indexOf('/admin') === 0) {
+        location.replace('/admin.html' + location.search + location.hash);
+      } else if (p.indexOf('/app') === 0) {
+        location.replace('/app.html' + location.search + location.hash);
+      } else {
+        location.replace('/' + location.search + location.hash);
+      }
+    })();
+  </script>
+</head>
+<body style="background:#151518;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+  <div>পেজ লোড হচ্ছে…</div>
+</body>
+</html>

@@ -1,0 +1,85 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "headers": [
+    {
+      "source": "/admin(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/app(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/(index.html)?",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "Content-Type",
+          "value": "application/javascript"
+        }
+      ]
+    },
+    {
+      "source": "/manifest.json",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/manifest+json"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/samples/:path*",
+      "destination": "/images/samples/:path*"
+    },
+    {
+      "source": "/logos/:path*",
+      "destination": "/images/logos/:path*"
+    },
+    {
+      "source": "/app/:path*",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/app",
+      "destination": "/app.html"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    }
+  ]
+}

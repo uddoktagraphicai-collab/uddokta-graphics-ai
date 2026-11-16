@@ -1,0 +1,6 @@
+/samples/*  /images/samples/:splat  200
+/logos/*    /images/logos/:splat    200
+/app/*      /app.html               200
+/app        /app.html               200
+/admin/*    /admin.html             200
+/admin      /admin.html             200

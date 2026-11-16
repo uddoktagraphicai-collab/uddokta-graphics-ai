@@ -1,0 +1,19 @@
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Serve existing files and directories directly
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Samples & Logos rewrites
+  RewriteRule ^samples/(.*)$ images/samples/$1 [L]
+  RewriteRule ^logos/(.*)$ images/logos/$1 [L]
+
+  # Admin SPA routing
+  RewriteRule ^admin(/.*)?$ admin.html [L]
+
+  # App SPA routing
+  RewriteRule ^app(/.*)?$ app.html [L]
+</IfModule>

@@ -1,0 +1,4 @@
+project_id = "uddokta-graphics-ai"
+
+[functions.api]
+verify_jwt = false

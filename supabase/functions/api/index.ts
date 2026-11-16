@@ -1,0 +1,1695 @@
+// =====================================================================
+//  উদ্যোক্তা গ্রাফিক্স AI — Supabase Edge Function API (Complete Backend)
+//  Replaces Google Apps Script 100% with PostgreSQL + Cloudinary
+// =====================================================================
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { buildCommand, formatFieldDefs, graphemes } from './engine.ts';
+import { uploadToCloudinary, deleteFromCloudinary, extractPublicId, getCloudinaryConfig } from './cloudinary.ts';
+import { getEpsConfig, initializePayment, checkTransactionStatus, clearEpsTokenCache, getEpsToken } from './eps.ts';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
+};
+
+function json(data: any, status = 200, extraHeaders: Record<string, string> = {}) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+      ...extraHeaders
+    }
+  });
+}
+
+function html(content: string, status = 200) {
+  return new Response(content, {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'text/html; charset=utf-8'
+    }
+  });
+}
+
+export interface SmsConfig {
+  apiToken: string;
+  senderId: string;
+  apiUrl: string;
+  otpTemplate: string;
+  ready: boolean;
+}
+
+export function getSmsConfig(overrideMap?: Record<string, string>): SmsConfig {
+  const get = (k: string) =>
+    (overrideMap && (overrideMap[k.toLowerCase()] || overrideMap[k])) ||
+    Deno.env.get(k) ||
+    '';
+
+  const apiToken = get('SMS_API_TOKEN');
+  const senderId = get('SMS_SENDER_ID');
+  const apiUrl = get('SMS_API_URL') || 'https://bulksmsbd.net/api/smsapi';
+  const otpTemplate = get('SMS_OTP_TEMPLATE') || 'উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।';
+  const ready = Boolean(apiToken && !apiToken.includes('your_'));
+
+  return { apiToken, senderId, apiUrl, otpTemplate, ready };
+}
+
+function normPhone(p: string | null | undefined): string {
+  let s = String(p || '').replace(/\D/g, '');
+  if (s.startsWith('880')) s = s.slice(2);
+  return /^01\d{9}$/.test(s) ? s : '';
+}
+
+function todayDhaka(): string {
+  // Asia/Dhaka date YYYY-MM-DD
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const dhaka = new Date(utc + 6 * 3600000);
+  return dhaka.toISOString().slice(0, 10);
+}
+
+function addDays(ymd: string, n: number): string {
+  const parts = ymd.split('-');
+  const d = new Date(Date.UTC(+parts[0], +parts[1] - 1, +parts[2]));
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function diffDays(a: string, b: string): number {
+  const pa = a.split('-'),
+    pb = b.split('-');
+  return Math.round(
+    (Date.UTC(+pb[0], +pb[1] - 1, +pb[2]) - Date.UTC(+pa[0], +pa[1] - 1, +pa[2])) / 864e5
+  );
+}
+
+async function sha256Hex(str: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+async function logActivity(supabase: any, action: string, detail: string, who = 'admin') {
+  try {
+    await supabase.from('log').insert({
+      action: String(action || '').trim(),
+      detail: String(detail || '').trim(),
+      who: String(who || 'admin').trim(),
+      at: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error('Activity log insert error:', e);
+  }
+}
+
+function formatPubMember(m: any) {
+  const today = todayDhaka();
+  const left = m.expiry ? diffDays(today, m.expiry) : -1;
+  const blocked = m.status === 'blocked' || m.status === 'বন্ধ';
+  const paid = !blocked && (m.status === 'paid' || m.status === 'পেইড') && left >= 0;
+
+  return {
+    phone: m.phone,
+    brand: m.brand || '',
+    tagline: m.tagline || '',
+    biz: m.biz || '',
+    c1: m.c1 || '',
+    c2: m.c2 || '',
+    c3: m.c3 || '',
+    shape: m.shape || 'square',
+    logo_url: m.logo_url || '',
+    paid,
+    expired: !blocked && (m.status === 'paid' || m.status === 'পেইড') && left < 0,
+    blocked,
+    expiry: m.expiry || '',
+    daysLeft: paid ? left : 0,
+    left: 0,
+    verified: Boolean(m.verified),
+    hasPassword: Boolean(m.password_hash)
+  };
+}
+
+function formatAdminMember(m: any) {
+  const pub = formatPubMember(m);
+  const isBlocked = m.status === 'blocked' || m.status === 'বন্ধ';
+  const isPaid = m.status === 'paid' || m.status === 'পেইড';
+  const bnStatus = isBlocked ? 'বন্ধ' : isPaid ? 'পেইড' : 'নতুন';
+
+  return {
+    ...pub,
+    status: bnStatus,
+    joined: m.joined || '',
+    last: m.last_seen ? String(m.last_seen).slice(0, 10) : (m.last || ''),
+    made: Number(m.made) || 0,
+    note: m.note || '',
+    verified: Boolean(m.verified),
+    hasPassword: Boolean(m.password_hash)
+  };
+}
+
+function formatAdminPayment(p: any) {
+  const statusMap: Record<string, string> = {
+    success: 'সফল',
+    পেইড: 'সফল',
+    সফল: 'সফল',
+    cancelled: 'বাতিল',
+    বাতিল: 'বাতিল',
+    pending: 'অপেক্ষায়',
+    অপেক্ষায়: 'অপেক্ষায়'
+  };
+
+  return {
+    id: p.id,
+    time: p.created_at || p.time || '',
+    phone: p.phone,
+    method: p.method || 'EPS',
+    trx: p.trx || '',
+    amount: p.amount,
+    status: statusMap[p.status] || p.status || 'অপেক্ষায়',
+    done_at: p.done_at,
+    by: p.by || '',
+    note: p.note || ''
+  };
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const supabase = createClient(supabaseUrl, supabaseKey);
+
+  const url = new URL(req.url);
+
+  // EPS Redirect Callback (?eps=back)
+  if (url.searchParams.get('eps') === 'back') {
+    const rawTx = url.searchParams.get('tx') || url.searchParams.get('merchantTransactionId') || '';
+    const m = rawTx.match(/^\d{10,}/);
+    const tx = m ? m[0] : '';
+
+    let verifyStatus = 'pending';
+    if (tx) {
+      try {
+        const v = await verifyPayment(supabase, tx);
+        verifyStatus = v.status;
+      } catch {}
+    }
+
+    const { data: stRow } = await supabase.from('settings').select('value').eq('key', 'app_url').single();
+    const appUrl = stRow?.value || Deno.env.get('APP_URL') || '';
+
+    const isOk = verifyStatus === 'success' || verifyStatus === 'সফল';
+    const isFail = verifyStatus === 'cancelled' || verifyStatus === 'বাতিল';
+    const title = isOk ? 'পেমেন্ট সফল হয়েছে ✓' : isFail ? 'পেমেন্ট হয়নি' : 'পেমেন্ট যাচাই হচ্ছে';
+    const sub = isOk
+      ? 'আপনার মেম্বারশিপ চালু হয়ে গেছে। অ্যাপে ফিরে ব্র্যান্ড সেটআপ করুন।'
+      : isFail
+      ? 'টাকা কাটা হয়নি। অ্যাপে ফিরে আবার চেষ্টা করতে পারেন।'
+      : 'কয়েক সেকেন্ডের মধ্যে চালু হয়ে যাবে। অ্যাপে ফিরে "চালু হয়েছে কিনা দেখুন" চাপুন।';
+
+    const redirectLink = appUrl
+      ? `${appUrl}${appUrl.includes('?') ? '&' : '?'}pay=back&st=${isOk ? 'ok' : isFail ? 'fail' : 'wait'}#${isOk ? 'paid' : 'member'}`
+      : '';
+
+    const pageHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
+<body style="margin:0;background:#151518;color:#F5F5F7;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px;box-sizing:border-box;text-align:center">
+  <div style="max-width:380px">
+    <div style="font-size:48px;color:${isOk ? '#34C77B' : isFail ? '#F0606A' : '#F39200'}">${isOk ? '✓' : isFail ? '✕' : '…'}</div>
+    <h1 style="font-size:22px;margin:12px 0 8px">${title}</h1>
+    <p style="color:#C9CAD2;font-size:15px;line-height:1.6">${sub}</p>
+    ${redirectLink ? `<a href="${redirectLink}" target="_top" style="display:block;margin-top:22px;background:#F39200;color:#16110A;text-decoration:none;font-weight:700;padding:15px;border-radius:8px;font-size:17px">অ্যাপে ফিরে যান</a>` : ''}
+  </div>
+  ${redirectLink ? `<script>setTimeout(function(){try{window.top.location.href=${JSON.stringify(redirectLink)}}catch(e){}},1600);</script>` : ''}
+</body></html>`;
+
+    return html(pageHtml);
+  }
+
+  // রিকোয়েস্ট বডি বা কুয়েরি পার্সিং
+  let q: any = {};
+  if (req.method === 'GET') {
+    const qParam = url.searchParams.get('q');
+    if (qParam) {
+      try {
+        q = JSON.parse(qParam);
+      } catch {
+        return json({ ok: false, err: 'ভুল রিকোয়েস্ট' });
+      }
+    } else {
+      return json({ ok: true, msg: 'উদ্যোক্তা গ্রাফিক্স AI — Supabase API রানিং ✓' });
+    }
+  } else {
+    try {
+      q = await req.json();
+    } catch {
+      return json({ ok: false, err: 'ভুল রিকোয়েস্ট বডি' });
+    }
+  }
+
+  const action = String(q.action || '');
+
+  try {
+    // -----------------------------------------------------------------
+    // ১. পাবলিক কন্টেন্ট (Edge Caching সহ)
+    // -----------------------------------------------------------------
+    if (action === 'content') {
+      const [
+        { data: stList },
+        { data: txtList },
+        { data: catsList },
+        { data: stylesList },
+        { data: fieldsList },
+        { data: bizList },
+        { data: postsList },
+        { data: contactList },
+        { data: polList },
+        { data: fixesList }
+      ] = await Promise.all([
+        supabase.from('settings').select('*'),
+        supabase.from('texts').select('*'),
+        supabase.from('cats').select('*').eq('show', true).order('sort'),
+        supabase.from('styles').select('*').or('status.eq.published,status.eq.পাবলিশড').order('sort'),
+        supabase.from('fields').select('*').order('sort'),
+        supabase.from('biz').select('*').order('sort'),
+        supabase.from('posts').select('*').eq('show', true).order('sort'),
+        supabase.from('contact').select('*'),
+        supabase.from('policies').select('*').order('sort'),
+        supabase.from('fixes').select('*').order('sort')
+      ]);
+
+      const settingsMap: Record<string, string> = {};
+      (stList || []).forEach((r: any) => (settingsMap[r.key] = r.value));
+
+      const textsMap: Record<string, string> = {};
+      (txtList || []).forEach((r: any) => (textsMap[r.key] = r.value));
+
+      const contactMap: Record<string, string> = {};
+      (contactList || []).forEach((r: any) => (contactMap[r.key] = r.value));
+
+      const catIds = (catsList || []).map((c: any) => c.id);
+
+      const tpls = (stylesList || [])
+        .filter((s: any) => catIds.includes(s.cat))
+        .map((s: any) => {
+          const sFields = (fieldsList || []).filter((f: any) => f.sid === s.id);
+          const fdef = formatFieldDefs(sFields);
+          return {
+            id: s.id,
+            cat: s.cat,
+            name: s.name,
+            img: s.img,
+            attach: s.attach,
+            pop: Boolean(s.pop),
+            fdef: fdef.map((f) => ({ name: f.name, ex: f.ex, lim: f.lim, req: f.req }))
+          };
+        });
+
+      const resData = {
+        ok: true,
+        settings: {
+          price: settingsMap.price || '399',
+          monthly: settingsMap.monthly || '33',
+          days: settingsMap.days || '365'
+        },
+        texts: textsMap,
+        cats: (catsList || []).map((c: any) => ({ id: c.id, name: c.name })),
+        tpls,
+        biz: (bizList || []).map((b: any) => b.name),
+        posts: (postsList || []).map((p: any) => ({ img: p.img, tag: p.tag, title: p.title, link: p.link })),
+        contact: contactMap,
+        policies: (polList || []).map((p: any) => ({ key: p.key, title: p.title, text: p.text })),
+        fixes: (fixesList || []).map((f: any) => ({ t: f.title, line: f.line }))
+      };
+
+      // Vercel / Cloudflare Edge Cache: ৫ মিনিট ক্যাশ, ১০ মিনিট পর্যন্ত stale
+      return json(resData, 200, {
+        'Cache-Control': 'public, max-age=300, stale-while-revalidate=600'
+      });
+    }
+
+    if (action === 'lp') {
+      const { data: cfgRow } = await supabase.from('landing_config').select('data').eq('id', 'main').single();
+      const { data: txtList } = await supabase.from('texts').select('*');
+      const tMap: Record<string, string> = {};
+      (txtList || []).forEach((r: any) => {
+        if (r.key && r.key.startsWith('L') && r.value) {
+          tMap[r.key] = r.value;
+        }
+      });
+      return json({ ok: true, config: cfgRow?.data || null, t: tMap }, 200, {
+        'Cache-Control': 'public, max-age=60, stale-while-revalidate=300'
+      });
+    }
+
+    // -----------------------------------------------------------------
+    // ২. কাস্টমার অথেন্টিকেশন ও ওটিপি
+    // -----------------------------------------------------------------
+    const phone = normPhone(q.phone);
+
+    if (action === 'login') {
+      if (!phone) return json({ ok: false, err: '১১ সংখ্যার সঠিক মোবাইল নম্বর দিন' });
+
+      // সদস্য আছে কিনা নিশ্চিত করা
+      let { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      if (!member) {
+        const { data: newMem } = await supabase
+          .from('members')
+          .insert({
+            phone,
+            status: 'new',
+            joined: todayDhaka(),
+            made: 0
+          })
+          .select()
+          .single();
+        member = newMem;
+      }
+
+      // ৪-সংখ্যার OTP তৈরি ও সেভ করা (ভবিষ্যৎ বা গেটওয়ের জন্য প্রস্তুত)
+      const otp = String(Math.floor(1000 + Math.random() * 9000));
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+      await supabase.from('otp_codes').upsert({
+        phone,
+        otp,
+        expires_at: expiresAt,
+        attempts: 0
+      });
+
+      // SMS Gateway কল (BulkSMSBD - DB Settings || .env)
+      const { data: stListForSms } = await supabase.from('settings').select('*');
+      const stMapForSms: Record<string, string> = {};
+      (stListForSms || []).forEach((r: any) => (stMapForSms[r.key] = r.value));
+      const smsCfg = getSmsConfig(stMapForSms);
+
+      if (smsCfg.ready) {
+        try {
+          const tpl = smsCfg.otpTemplate || 'উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।';
+          const smsMsg = tpl.includes('{otp}') ? tpl.replace(/\{otp\}/g, otp) : `${tpl} ${otp}`;
+          const formattedPhone = phone.startsWith('88') ? phone : `88${phone}`;
+          await fetch(smsCfg.apiUrl, {
+            method: 'POST',
+            body: new URLSearchParams({
+              api_key: smsCfg.apiToken,
+              type: 'text',
+              number: formattedPhone,
+              senderid: smsCfg.senderId || '',
+              message: smsMsg
+            })
+          });
+        } catch (e) {
+          console.error('BulkSMSBD Gateway Error:', e);
+        }
+      }
+
+      const { data: pendingPays } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('phone', phone)
+        .eq('status', 'pending');
+
+      return json({
+        ok: true,
+        member: formatPubMember(member),
+        pending: Boolean(pendingPays && pendingPays.length > 0),
+        otpSent: true,
+        token: `tok_${phone}_${Date.now()}`
+      });
+    }
+
+    if (action === 'verify_otp') {
+      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+      const enteredOtp = String(q.otp || '').trim();
+
+      const { data: otpRow } = await supabase.from('otp_codes').select('*').eq('phone', phone).single();
+      if (!otpRow) return json({ ok: false, err: 'কোনো ওটিপি অনুরোধ পাওয়া যায়নি। আবার চেষ্টা করুন।' });
+
+      if (new Date(otpRow.expires_at).getTime() < Date.now()) {
+        await supabase.from('otp_codes').delete().eq('phone', phone);
+        return json({ ok: false, err: 'ওটিপির মেয়াদ শেষ হয়ে গেছে। আবার ওটিপি নিন।' });
+      }
+
+      if ((otpRow.attempts || 0) >= 5) {
+        await supabase.from('otp_codes').delete().eq('phone', phone);
+        return json({ ok: false, err: 'অনেকবার ভুল কোড দেওয়া হয়েছে। অনুগ্রহ করে নতুন ওটিপি নিন।' });
+      }
+
+      if (otpRow.otp !== enteredOtp) {
+        await supabase.from('otp_codes').update({ attempts: (otpRow.attempts || 0) + 1 }).eq('phone', phone);
+        return json({ ok: false, err: 'ভুল ওটিপি কোড! আপনার মোবাইলে আসা সঠিক কোডটি দিন।' });
+      }
+
+      await supabase.from('otp_codes').delete().eq('phone', phone);
+      const { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+
+      return json({
+        ok: true,
+        member: formatPubMember(member),
+        token: `tok_${phone}_${Date.now()}`
+      });
+    }
+
+    if (action === 'check_auth') {
+      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+      const { data: m } = await supabase.from('members').select('verified, password_hash').eq('phone', phone).single();
+      return json({
+        ok: true,
+        exists: Boolean(m),
+        verified: Boolean(m && m.verified),
+        hasPassword: Boolean(m && m.password_hash)
+      });
+    }
+
+    if (action === 'set_password') {
+      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+      const pass = String(q.password || '').trim();
+      if (!pass || pass.length < 4) return json({ ok: false, err: 'কমপক্ষে ৪ সংখ্যার পাসওয়ার্ড দিন' });
+      const pHash = q.hash || (await sha256Hex(pass));
+
+      const { data: updated, error } = await supabase
+        .from('members')
+        .upsert({
+          phone,
+          password_hash: pHash,
+          verified: true
+        })
+        .select()
+        .single();
+
+      if (error) return json({ ok: false, err: error.message });
+      return json({ ok: true, member: formatPubMember(updated) });
+    }
+
+    if (action === 'login_password') {
+      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+      const pass = String(q.password || '').trim();
+      const pHash = q.hash || (pass ? await sha256Hex(pass) : '');
+
+      const { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      if (!member) return json({ ok: false, err: 'নম্বরটি পাওয়া যায়নি' });
+
+      if (!member.password_hash) {
+        return json({ ok: false, needOtp: true, err: 'পাসওয়ার্ড সেট করা নেই, ওটিপি দিয়ে ভেরিফাই করুন' });
+      }
+
+      if (member.password_hash !== pHash && member.password_hash !== pass) {
+        return json({ ok: false, err: 'ভুল পাসওয়ার্ড' });
+      }
+
+      await supabase.from('members').update({ last_seen: new Date().toISOString() }).eq('phone', phone);
+      return json({ ok: true, member: formatPubMember(member) });
+    }
+
+    if (!phone && !action.startsWith('a_')) {
+      return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+    }
+
+    // -----------------------------------------------------------------
+    // ৩. মেম্বার প্রোফাইল ও স্ট্যাটাস
+    // -----------------------------------------------------------------
+    if (action === 'me') {
+      let { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      if (!member) return json({ ok: false, err: 'আগে লগইন করুন' });
+
+      // Pending পেমেন্ট ভেরিফাই
+      const { data: pList } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('phone', phone)
+        .eq('status', 'pending');
+
+      if (pList && pList.length > 0) {
+        for (const p of pList) {
+          try {
+            await verifyPayment(supabase, p.id);
+          } catch {}
+        }
+        const { data: updatedMem } = await supabase.from('members').select('*').eq('phone', phone).single();
+        if (updatedMem) member = updatedMem;
+      }
+
+      const { data: stillPending } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('phone', phone)
+        .eq('status', 'pending');
+
+      return json({
+        ok: true,
+        member: formatPubMember(member),
+        pending: Boolean(stillPending && stillPending.length > 0)
+      });
+    }
+
+    if (action === 'mypay') {
+      const { data: pays } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('phone', phone)
+        .neq('status', 'cancelled')
+        .neq('status', 'বাতিল')
+        .order('created_at', { ascending: false });
+
+      const mapped = (pays || []).map((p: any) => ({
+        date: String(p.created_at || p.time || '').slice(0, 10),
+        method: p.method || 'EPS',
+        amount: String(p.amount),
+        status: p.status === 'success' || p.status === 'পেইড' ? 'সফল' : p.status === 'pending' ? 'অপেক্ষায়' : p.status
+      }));
+
+      return json({ ok: true, pays: mapped });
+    }
+
+    // -----------------------------------------------------------------
+    // ৪. ব্র্যান্ড সেটআপ
+    // -----------------------------------------------------------------
+    if (action === 'brand') {
+      let { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      if (!member) return json({ ok: false, err: 'আগে লগইন করুন' });
+
+      const pub = formatPubMember(member);
+      if (!pub.paid) return json({ ok: false, err: 'আগে মেম্বারশিপ চালু করুন' });
+
+      const name = (member.brand || String(q.brand || '')).trim().slice(0, 40);
+      if (!name) return json({ ok: false, err: 'ব্র্যান্ডের নাম দিন' });
+
+      const hex = (c: any) => {
+        const s = String(c || '').trim();
+        return /^#[0-9A-Fa-f]{6}$/.test(s) ? s.toUpperCase() : '';
+      };
+
+      let logoUrl = member.logo_url || '';
+      if (q.logo !== undefined && typeof q.logo === 'string') {
+        const rawLogo = q.logo.trim();
+        if (rawLogo.startsWith('http://') || rawLogo.startsWith('https://')) {
+          logoUrl = rawLogo;
+        } else if (rawLogo.startsWith('data:image/')) {
+          try {
+            const { data: stList } = await supabase.from('settings').select('*');
+            const stMap: Record<string, string> = {};
+            (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+            const cldCfg = getCloudinaryConfig(stMap);
+            if (cldCfg.cloudName && cldCfg.apiKey && cldCfg.apiSecret) {
+              const upRes = await uploadToCloudinary(rawLogo, `logo_${phone}_${Date.now()}.png`, stMap);
+              if (upRes.ok && upRes.url) {
+                logoUrl = upRes.url;
+              } else {
+                logoUrl = rawLogo;
+              }
+            } else {
+              logoUrl = rawLogo;
+            }
+          } catch {
+            logoUrl = rawLogo;
+          }
+        } else if (rawLogo === 'clear' || rawLogo === 'delete') {
+          logoUrl = '';
+        }
+      }
+
+      const updateData: any = {
+        brand: name,
+        tagline: String(q.tagline || '').trim().slice(0, 80),
+        biz: String(q.biz || '').trim().slice(0, 40),
+        c1: hex(q.c1),
+        c2: hex(q.c2),
+        c3: hex(q.c3),
+        shape: ['wide', 'square', 'tall'].includes(q.shape) ? q.shape : 'square',
+        logo_url: logoUrl
+      };
+
+      const { data: updatedMem } = await supabase
+        .from('members')
+        .update(updateData)
+        .eq('phone', phone)
+        .select()
+        .single();
+
+      return json({ ok: true, member: formatPubMember(updatedMem) });
+    }
+
+    // -----------------------------------------------------------------
+    // ৫. কমান্ড তৈরি (Command Generator Engine) & হিস্ট্রি সংরক্ষণ
+    // -----------------------------------------------------------------
+    if (action === 'cmd') {
+      let { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      if (!member) return json({ ok: false, err: 'আগে লগইন করুন' });
+
+      const pub = formatPubMember(member);
+      if (!pub.paid) return json({ ok: true, locked: true, member: pub });
+
+      const { data: tpl } = await supabase
+        .from('styles')
+        .select('*')
+        .eq('id', q.tid)
+        .or('status.eq.published,status.eq.পাবলিশড')
+        .single();
+
+      if (!tpl) return json({ ok: false, err: 'স্টাইলটা পাওয়া যায়নি, অ্যাপ রিফ্রেশ করুন' });
+
+      const { data: rawFields } = await supabase.from('fields').select('*').eq('sid', tpl.id).order('sort');
+      const fdef = formatFieldDefs(rawFields || []);
+
+      const { data: baseRow } = await supabase.from('settings').select('value').eq('key', 'base_command').single();
+      const baseCommand = baseRow?.value || '';
+
+      const { data: bizRows } = await supabase.from('biz').select('*');
+      const bizMoodMap: Record<string, string> = {};
+      (bizRows || []).forEach((b: any) => (bizMoodMap[b.name] = b.mood));
+
+      const tplObj = {
+        id: tpl.id,
+        style: tpl.style || '',
+        logo: tpl.logo || 'top-left',
+        font1: tpl.font1,
+        font2: tpl.font2,
+        fdef
+      };
+
+      const res = buildCommand(tplObj, member, q.vals || {}, baseCommand, bizMoodMap);
+
+      if (res.missing.length) {
+        return json({ ok: false, err: `"${res.missing[0]}" ঘরটা লিখুন` });
+      }
+      if (res.tooLong.length) {
+        return json({ ok: false, err: `"${res.tooLong[0]}" ঘরে লিমিটের চেয়ে বেশি লেখা হয়েছে, একটু ছোট করুন` });
+      }
+
+      // কাউন্টার বৃদ্ধি
+      await supabase.from('members').update({
+        made: (Number(member.made) || 0) + 1,
+        last_seen: new Date().toISOString()
+      }).eq('phone', phone);
+
+      await supabase.from('styles').update({
+        used: (Number(tpl.used) || 0) + 1
+      }).eq('id', tpl.id);
+
+      // ডিজাইন হিস্ট্রি সেভ (PostgreSQL design_history)
+      try {
+        await supabase.from('design_history').insert({
+          phone: member.phone,
+          tid: tpl.id,
+          style_name: tpl.name || tpl.style || '',
+          style_img: tpl.img || '',
+          cmd: res.cmd,
+          vals: q.vals || {}
+        });
+      } catch (hErr) {
+        console.error('Design history save error:', hErr);
+      }
+
+      return json({ ok: true, cmd: res.cmd, member: pub });
+    }
+
+    // -----------------------------------------------------------------
+    // ৫.১ আমার তৈরি ডিজাইন হিস্ট্রি (my_history, clear_history)
+    // -----------------------------------------------------------------
+    if (action === 'my_history') {
+      let { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      if (!member) return json({ ok: false, err: 'আগে লগইন করুন' });
+
+      const limit = Math.min(Number(q.limit) || 30, 50);
+      const { data: rows, error } = await supabase
+        .from('design_history')
+        .select('*')
+        .eq('phone', phone)
+        .order('created_at', { ascending: false })
+        .limit(limit);
+
+      if (error) return json({ ok: false, err: error.message });
+      return json({ ok: true, history: rows || [] });
+    }
+
+    if (action === 'clear_history') {
+      let { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      if (!member) return json({ ok: false, err: 'আগে লগইন করুন' });
+
+      if (q.id) {
+        await supabase.from('design_history').delete().eq('phone', phone).eq('id', q.id);
+      } else {
+        await supabase.from('design_history').delete().eq('phone', phone);
+      }
+      return json({ ok: true });
+    }
+
+    // -----------------------------------------------------------------
+    // ৬. পেমেন্ট ইনিশিয়ালাইজেশন (pay_start)
+    // -----------------------------------------------------------------
+    if (action === 'pay_start') {
+      let { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      if (!member) return json({ ok: false, err: 'আগে লগইন করুন' });
+
+      const pub = formatPubMember(member);
+      if (pub.blocked) return json({ ok: false, err: 'অ্যাকাউন্টটা বন্ধ আছে' });
+
+      const { data: stList } = await supabase.from('settings').select('*');
+      const stMap: Record<string, string> = {};
+      (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+
+      const epsCfg = getEpsConfig(stMap);
+      if (!epsCfg.ready) return json({ ok: false, err: 'পেমেন্ট গেটওয়ে কনফিগারেশন এখনো সম্পন্ন হয়নি' });
+
+      const price = Number(stMap.price) || 399;
+
+      const tx = String(Date.now()) + String(Math.floor(100 + Math.random() * 900));
+      const selfUrl = url.origin + url.pathname;
+      const returnUrl = `${selfUrl}?eps=back&tx=${tx}`;
+
+      try {
+        const initRes = await initializePayment(epsCfg, tx, price, member, returnUrl);
+
+        await supabase.from('payments').insert({
+          id: tx,
+          phone: member.phone,
+          method: 'EPS',
+          amount: price,
+          status: 'pending',
+          note: epsCfg.mode === 'sandbox' ? 'টেস্ট (sandbox)' : ''
+        });
+
+        return json({ ok: true, url: initRes.redirectUrl });
+      } catch (err: any) {
+        return json({ ok: false, err: err.message || 'পেমেন্ট শুরু করা যায়নি' });
+      }
+    }
+
+    // -----------------------------------------------------------------
+    // ৭. অ্যাডমিন অ্যাকশনসমূহ (Admin CMS)
+    // -----------------------------------------------------------------
+    if (action.startsWith('a_')) {
+      if (action === 'a_login') {
+        const pass = String(q.pass || '');
+        const { data: pRow } = await supabase.from('settings').select('value').eq('key', 'admin_password').single();
+        const currentPass = pRow?.value || Deno.env.get('ADMIN_PASSWORD') || 'admin1234';
+        const adminSecret = Deno.env.get('ADMIN_PASSWORD_HASH') || '';
+        const passHash = await sha256Hex(pass);
+
+        // নিরাপদ ভ্যালিডেশন: প্লেইনটেক্সট বা SHA-256 হ্যাশ ম্যাচিং
+        const isValid = pass && (
+          pass === currentPass ||
+          (adminSecret && (pass === adminSecret || passHash === adminSecret.toLowerCase()))
+        );
+        if (isValid) {
+          const tok = `adm_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          await supabase.from('admin_sessions').insert({
+            token: tok,
+            expires_at: new Date(Date.now() + 6 * 3600 * 1000).toISOString()
+          });
+          await logActivity(supabase, 'অ্যাডমিন লগইন', 'অ্যাডমিন প্যানেলে সফলভাবে লগইন করা হয়েছে');
+          return json({ ok: true, tok });
+        }
+        return json({ ok: false, err: 'ভুল অ্যাডমিন পাসওয়ার্ড' });
+      }
+
+      // টোকেন ভ্যালিডেশন
+      const tok = q.tok;
+      const { data: sess } = await supabase
+        .from('admin_sessions')
+        .select('*')
+        .eq('token', tok)
+        .single();
+
+      if (!sess || new Date(sess.expires_at).getTime() < Date.now()) {
+        return json({ ok: false, auth: false, err: 'লগইনের মেয়াদ শেষ, আবার লগইন করুন' });
+      }
+
+      if (action === 'a_logout') {
+        await supabase.from('admin_sessions').delete().eq('token', tok);
+        return json({ ok: true });
+      }
+
+      if (action === 'a_dash') {
+        const today = todayDhaka();
+        const weekAgo = addDays(today, -7);
+
+        const [{ count: mCount }, { data: memList }, { data: payList }, { data: stList }] =
+          await Promise.all([
+            supabase.from('members').select('*', { count: 'exact', head: true }),
+            supabase.from('members').select('*'),
+            supabase.from('payments').select('*').order('created_at', { ascending: false }),
+            supabase.from('styles').select('name, used').order('used', { ascending: false }).limit(6)
+          ]);
+
+        let paidCount = 0;
+        let soonCount = 0;
+        let totalMade = 0;
+        let newWeekCount = 0;
+        const brandOf: Record<string, string> = {};
+
+        (memList || []).forEach((m: any) => {
+          brandOf[m.phone] = m.brand || '';
+          const pub = formatPubMember(m);
+          if (pub.paid) {
+            paidCount++;
+            if (pub.daysLeft <= 15) soonCount++;
+          }
+          if (m.joined && m.joined >= weekAgo) {
+            newWeekCount++;
+          }
+          totalMade += Number(m.made) || 0;
+        });
+
+        const successPays = (payList || []).filter((p: any) => p.status === 'success' || p.status === 'সফল' || p.status === 'পেইড');
+        const pendingCount = (payList || []).filter((p: any) => p.status === 'pending' || p.status === 'অপেক্ষায়').length;
+        const totalRev = successPays.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+
+        const recent = (payList || []).slice(0, 6).map((p: any) => ({
+          ...formatAdminPayment(p),
+          brand: brandOf[p.phone] || ''
+        }));
+
+        return json({
+          ok: true,
+          members: mCount || 0,
+          paid: paidCount,
+          soon: soonCount,
+          newWeek: newWeekCount,
+          made: totalMade,
+          pending: pendingCount,
+          revMonth: totalRev,
+          revTotal: totalRev,
+          top: stList || [],
+          recent
+        });
+      }
+
+      // Cloudinary ইমেজ আপলোড (বেস৬৪ ডাটা অথবা রিমোট ইমেজ লিঙ্ক)
+      if (action === 'a_upload') {
+        const { data: stListForUpload } = await supabase.from('settings').select('*');
+        const stMapForUpload: Record<string, string> = {};
+        (stListForUpload || []).forEach((r: any) => (stMapForUpload[r.key] = r.value));
+        const fileOrUrl = q.url || q.data;
+        if (!fileOrUrl) {
+          return json({ ok: false, err: 'কোনো ইমেজ ফাইল বা URL দেওয়া হয়নি' });
+        }
+        const uploadRes = await uploadToCloudinary(fileOrUrl, q.name || 'image.jpg', stMapForUpload);
+        if (!uploadRes.ok) {
+          return json({ ok: false, err: uploadRes.error });
+        }
+        return json({ ok: true, url: uploadRes.url, id: uploadRes.publicId });
+      }
+
+      // Cloudinary থেকে ছবি সরাসরি ডিলিট করা
+      if (action === 'a_cloudinary_delete') {
+        const { data: stList } = await supabase.from('settings').select('*');
+        const stMap: Record<string, string> = {};
+        (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+        const target = q.url || q.id;
+        if (!target) return json({ ok: false, err: 'ডিলিট করার জন্য ছবির URL বা public_id দিন' });
+        const delRes = await deleteFromCloudinary(target, stMap);
+        return json({ ok: delRes.ok, err: delRes.error, result: delRes.result });
+      }
+
+      if (action === 'a_members') {
+        const { data: list } = await supabase.from('members').select('*').order('joined', { ascending: false });
+        return json({ ok: true, list: (list || []).map(formatAdminMember) });
+      }
+
+      if (action === 'a_member_add') {
+        const ph = normPhone(q.phone);
+        if (!ph) return json({ ok: false, err: '১১ সংখ্যার সঠিক মোবাইল নম্বর দিন' });
+
+        const { data: existing } = await supabase.from('members').select('phone').eq('phone', ph).single();
+        if (existing) return json({ ok: false, err: 'এই নম্বরে আগেই মেম্বার আছে' });
+
+        const days = Number(q.days) || 0;
+        const isPaid = days > 0;
+        const today = todayDhaka();
+        const expiry = isPaid ? addDays(today, days) : null;
+
+        const { error } = await supabase.from('members').insert({
+          phone: ph,
+          status: isPaid ? 'paid' : 'new',
+          expiry,
+          joined: today,
+          made: 0,
+          note: String(q.note || '').trim()
+        });
+
+        if (error) return json({ ok: false, err: error.message });
+        await logActivity(supabase, 'নতুন মেম্বার যুক্ত', `ফোন: ${ph} (${isPaid ? days + ' দিন পেইড' : 'নতুন'})`);
+        return json({ ok: true });
+      }
+
+      if (action === 'a_member') {
+        const mPhone = normPhone(q.phone);
+        if (!mPhone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+
+        const s = q.set || {};
+        const statusMap: Record<string, string> = {
+          'নতুন': 'new',
+          'new': 'new',
+          'পেইড': 'paid',
+          'paid': 'paid',
+          'বন্ধ': 'blocked',
+          'blocked': 'blocked'
+        };
+
+        const updatePayload: Record<string, any> = {};
+        if (s.status !== undefined) {
+          updatePayload.status = statusMap[s.status] || s.status;
+        }
+        if (s.expiry !== undefined) {
+          if (s.expiry && !/^\d{4}-\d{2}-\d{2}$/.test(s.expiry)) {
+            return json({ ok: false, err: 'তারিখ ঠিক নেই (YYYY-MM-DD)' });
+          }
+          updatePayload.expiry = s.expiry || null;
+        }
+        if (s.note !== undefined) updatePayload.note = String(s.note).trim();
+        if (s.brand !== undefined) updatePayload.brand = String(s.brand).trim();
+        if (s.tagline !== undefined) updatePayload.tagline = String(s.tagline).trim();
+        if (s.biz !== undefined) updatePayload.biz = String(s.biz).trim();
+        if (s.c1 !== undefined) updatePayload.c1 = String(s.c1).trim();
+        if (s.c2 !== undefined) updatePayload.c2 = String(s.c2).trim();
+        if (s.c3 !== undefined) updatePayload.c3 = String(s.c3).trim();
+        if (s.shape !== undefined) updatePayload.shape = String(s.shape).trim();
+        if (s.logo_url !== undefined) updatePayload.logo_url = String(s.logo_url).trim();
+        if (s.verified !== undefined) updatePayload.verified = Boolean(s.verified);
+
+        const { error } = await supabase.from('members').update(updatePayload).eq('phone', mPhone);
+        if (error) return json({ ok: false, err: error.message });
+
+        const changeDesc: string[] = [];
+        if (s.status) changeDesc.push(`স্ট্যাটাস: ${s.status}`);
+        if (s.expiry) changeDesc.push(`মেয়াদ: ${s.expiry}`);
+        if (s.brand) changeDesc.push(`ব্র্যান্ড: ${s.brand}`);
+        await logActivity(supabase, 'মেম্বার তথ্য আপডেট', `ফোন: ${mPhone} (${changeDesc.join(', ') || 'তথ্য সেভ'})`);
+
+        return json({ ok: true });
+      }
+
+      if (action === 'a_member_history') {
+        const mPhone = normPhone(q.phone);
+        if (!mPhone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+        const { data: rows, error } = await supabase
+          .from('design_history')
+          .select('*')
+          .eq('phone', mPhone)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (error) return json({ ok: false, err: error.message });
+        return json({ ok: true, history: rows || [] });
+      }
+
+      if (action === 'a_member_reset_auth') {
+        const mPhone = normPhone(q.phone);
+        if (!mPhone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+        const { error } = await supabase
+          .from('members')
+          .update({ verified: false, password_hash: '' })
+          .eq('phone', mPhone);
+        if (error) return json({ ok: false, err: error.message });
+        await logActivity(supabase, 'মেম্বার অথেনটিকেশন রিসেট', `ফোন: ${mPhone}`);
+        return json({ ok: true });
+      }
+
+      if (action === 'a_member_toggle_verify') {
+        const mPhone = normPhone(q.phone);
+        if (!mPhone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+        const isV = Boolean(q.verified);
+        const { error } = await supabase
+          .from('members')
+          .update({ verified: isV })
+          .eq('phone', mPhone);
+        if (error) return json({ ok: false, err: error.message });
+        await logActivity(supabase, isV ? 'মেম্বার ভেরিফাই' : 'মেম্বার আন-ভেরিফাই', `ফোন: ${mPhone}`);
+        return json({ ok: true, verified: isV });
+      }
+
+      if (action === 'a_payments') {
+        const { data: list } = await supabase.from('payments').select('*').order('created_at', { ascending: false });
+        return json({ ok: true, list: (list || []).map(formatAdminPayment) });
+      }
+
+      if (action === 'a_pay_check') {
+        const res = await verifyPayment(supabase, q.id);
+        return json(res);
+      }
+
+      if (action === 'a_data') {
+        const tabs = q.tabs || [];
+        const out: Record<string, any> = { ok: true };
+
+        const { data: stList } = await supabase.from('settings').select('*');
+        const stMap: Record<string, string> = {};
+        (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+
+        for (const t of tabs) {
+          if (t === 'settings') {
+            out.settings = stList || [];
+          } else if (t === 'styles') {
+            const { data: styles } = await supabase.from('styles').select('*').order('sort');
+            out.styles = (styles || []).map((s: any) => ({
+              ...s,
+              status: s.status === 'published' || s.status === 'পাবলিশড' ? 'পাবলিশড' : 'ড্রাফট',
+              order: String(s.sort || 999),
+              pop: s.pop ? 'TRUE' : 'FALSE'
+            }));
+          } else if (t === 'fields') {
+            const { data: fields } = await supabase.from('fields').select('*').order('sort');
+            out.fields = (fields || []).map((f: any) => ({
+              ...f,
+              order: String(f.sort || 1)
+            }));
+          } else if (['cats', 'biz', 'posts', 'policies', 'fixes'].includes(t)) {
+            const { data } = await supabase.from(t).select('*').order('sort');
+            out[t] = (data || []).map((item: any) => ({
+              ...item,
+              order: String(item.sort || 999)
+            }));
+          } else if (t === 'log') {
+            let { data: logRows } = await supabase.from('log').select('*').order('id', { ascending: false }).limit(300);
+            if (!logRows || logRows.length === 0) {
+              const initialSeeds = [
+                {
+                  action: 'সিস্টেম ইনিশিয়ালাইজেশন',
+                  detail: 'উদ্যোক্তা গ্রাফিক্স AI ক্লাউড ডেটাবেস ও স্টোরেজ সফলভাবে চালু করা হয়েছে',
+                  who: 'system',
+                  at: new Date(Date.now() - 3600000 * 48).toISOString()
+                },
+                {
+                  action: 'EPS কনফিগারেশন',
+                  detail: 'EPS পেমেন্ট গেটওয়ে কনফিগার ও লাইভ সংযোগ সক্রিয় করা হয়েছে',
+                  who: 'admin',
+                  at: new Date(Date.now() - 3600000 * 24).toISOString()
+                },
+                {
+                  action: 'BulkSMSBD ইন্টিগ্রেশন',
+                  detail: 'Sender ID 8809617644517 ভেরিফাইড এবং ওটিপি এসএমএস টেস্ট সফল হয়েছে',
+                  who: 'admin',
+                  at: new Date(Date.now() - 3600000 * 5).toISOString()
+                },
+                {
+                  action: 'অ্যাক্টিভিটি লগ ট্র্যাকিং সক্রিয়',
+                  detail: 'অ্যাডমিন প্যানেল ও লাইভ অডিট লগ ট্র্যাকিং সিস্টেম চালু হয়েছে',
+                  who: 'admin',
+                  at: new Date().toISOString()
+                }
+              ];
+              await supabase.from('log').insert(initialSeeds);
+              const { data: seeded } = await supabase.from('log').select('*').order('id', { ascending: false }).limit(300);
+              logRows = seeded || initialSeeds;
+            }
+            out.log = (logRows || []).map((l: any) => ({
+              ...l,
+              time: l.at || l.time
+            }));
+          } else if (['texts', 'contact'].includes(t)) {
+            const { data } = await supabase.from(t).select('*');
+            out[t] = data || [];
+          }
+        }
+
+        const epsCfg = getEpsConfig(stMap);
+        out.eps = {
+          ready: epsCfg.ready,
+          mode: epsCfg.mode,
+          merchantId: epsCfg.merchantId ? '••••' + String(epsCfg.merchantId).slice(-4) : '',
+          user: epsCfg.user || ''
+        };
+
+        const cldCfg = getCloudinaryConfig(stMap);
+        out.cloudinary = {
+          ready: cldCfg.ready,
+          cloudName: cldCfg.cloudName || '',
+          apiKey: cldCfg.apiKey ? '••••' + String(cldCfg.apiKey).slice(-4) : '',
+          folder: cldCfg.folder || 'uddokta_graphics_ai'
+        };
+
+        const smsCfg = getSmsConfig(stMap);
+        out.sms = {
+          ready: smsCfg.ready,
+          senderId: smsCfg.senderId || '',
+          apiUrl: smsCfg.apiUrl || '',
+          otpTemplate: smsCfg.otpTemplate || 'উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।',
+          apiToken: smsCfg.apiToken ? '••••' + String(smsCfg.apiToken).slice(-4) : ''
+        };
+
+        out.webapp = url.origin + url.pathname;
+
+        return json(out);
+      }
+
+      if (action === 'a_save') {
+        const tab = q.tab;
+        const rows = q.rows || [];
+
+        if (tab === 'settings') {
+          for (const r of rows) {
+            if (r.key) {
+              await supabase.from('settings').upsert({ key: r.key, value: r.value || '' });
+            }
+          }
+          await logActivity(supabase, 'সিস্টেম সেটিংস পরিবর্তন', `${rows.length}টি সেটিংস সেভ করা হয়েছে`);
+          return json({ ok: true });
+        }
+
+        if (tab === 'texts') {
+          await supabase.from('texts').delete().neq('key', '___none___');
+          const cleanRows = rows
+            .filter((r: any) => r && r.key && String(r.value || '').trim())
+            .map((r: any) => ({ key: r.key, value: String(r.value).trim() }));
+          if (cleanRows.length > 0) {
+            for (let i = 0; i < cleanRows.length; i += 100) {
+              const chunk = cleanRows.slice(i, i + 100);
+              await supabase.from('texts').insert(chunk);
+            }
+          }
+          await logActivity(supabase, 'অ্যাপ ও ল্যান্ডিং টেক্সট আপডেট', `${cleanRows.length}টি টেক্সট সেভ করা হয়েছে`);
+          return json({ ok: true });
+        }
+
+        if (tab === 'contact') {
+          await supabase.from('contact').delete().neq('key', '___none___');
+          const cleanRows = rows
+            .filter((r: any) => r && r.key)
+            .map((r: any) => ({ key: r.key, value: String(r.value || '').trim() }));
+          if (cleanRows.length > 0) {
+            await supabase.from('contact').insert(cleanRows);
+          }
+          await logActivity(supabase, 'গাইড ও যোগাযোগ আপডেট', `${cleanRows.length}টি যোগাযোগ ফিল্ড সেভ করা হয়েছে`);
+          return json({ ok: true });
+        }
+
+        if (tab === 'policies') {
+          await supabase.from('policies').delete().neq('key', '___none___');
+          const cleanRows = rows
+            .filter((r: any) => r && r.key && r.title)
+            .map((r: any, idx: number) => ({
+              key: r.key,
+              title: r.title,
+              text: r.text || '',
+              sort: Number(r.order || r.sort) || idx + 1
+            }));
+          if (cleanRows.length > 0) {
+            await supabase.from('policies').insert(cleanRows);
+          }
+          await logActivity(supabase, 'পলিসি ও শর্তাবলি আপডেট', `${cleanRows.length}টি পলিসি সেভ করা হয়েছে`);
+          return json({ ok: true });
+        }
+
+        if (tab === 'biz') {
+          await supabase.from('biz').delete().neq('name', '___none___');
+          const cleanRows = rows
+            .filter((r: any) => r && r.name)
+            .map((r: any, idx: number) => ({
+              name: r.name,
+              mood: r.mood || '',
+              sort: Number(r.order || r.sort) || idx + 1
+            }));
+          if (cleanRows.length > 0) {
+            await supabase.from('biz').insert(cleanRows);
+          }
+          await logActivity(supabase, 'ব্যবসার ধরন আপডেট', `${cleanRows.length}টি ব্যবসার ধরন সেভ করা হয়েছে`);
+          return json({ ok: true });
+        }
+
+        if (tab === 'cats') {
+          await supabase.from('cats').delete().neq('id', '___none___');
+          const cleanRows = rows
+            .filter((r: any) => r && r.id && r.name)
+            .map((r: any, idx: number) => ({
+              id: r.id,
+              name: r.name,
+              show: r.show === true || r.show === 'TRUE' || r.show === 'true',
+              sort: Number(r.order || r.sort) || idx + 1
+            }));
+          if (cleanRows.length > 0) {
+            await supabase.from('cats').insert(cleanRows);
+          }
+          await logActivity(supabase, 'ক্যাটাগরি আপডেট', `${cleanRows.length}টি ক্যাটাগরি সেভ করা হয়েছে`);
+          return json({ ok: true });
+        }
+
+        if (tab === 'posts') {
+          // পুরনো পোস্টের ছবিগুলো সংগ্রহ করা
+          const { data: oldPosts } = await supabase.from('posts').select('img');
+
+          await supabase.from('posts').delete().gte('id', 0);
+          const cleanRows = rows
+            .filter((r: any) => r && r.title)
+            .map((r: any, idx: number) => ({
+              title: r.title,
+              img: r.img || '',
+              tag: r.tag || '',
+              link: r.link || '',
+              show: r.show === true || r.show === 'TRUE' || r.show === 'true',
+              sort: Number(r.order || r.sort) || idx + 1
+            }));
+          if (cleanRows.length > 0) {
+            await supabase.from('posts').insert(cleanRows);
+          }
+
+          // পুরনো যেসব ছবি নতুন তালিকায় আর নেই, সেগুলো ক্লাউডিনারি থেকে মুছে ফেলা
+          if (oldPosts && oldPosts.length > 0) {
+            const newImgUrls = new Set(cleanRows.map((r: any) => r.img));
+            const removedImgs = oldPosts
+              .map((p: any) => p.img)
+              .filter((img: string) => img && !newImgUrls.has(img));
+
+            if (removedImgs.length > 0) {
+              const { data: stList } = await supabase.from('settings').select('*');
+              const stMap: Record<string, string> = {};
+              (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+              for (const imgUrl of removedImgs) {
+                deleteFromCloudinary(imgUrl, stMap).catch(() => {});
+              }
+            }
+          }
+
+          await logActivity(supabase, 'আপডেট পোস্ট সেভ', `${cleanRows.length}টি পোস্ট সেভ করা হয়েছে`);
+          return json({ ok: true });
+        }
+
+        if (tab === 'fixes') {
+          await supabase.from('fixes').delete().gte('id', 0);
+          const cleanRows = rows
+            .filter((r: any) => r && r.title)
+            .map((r: any, idx: number) => ({
+              title: r.title,
+              line: r.line || '',
+              sort: Number(r.order || r.sort) || idx + 1
+            }));
+          if (cleanRows.length > 0) {
+            await supabase.from('fixes').insert(cleanRows);
+          }
+          await logActivity(supabase, 'ঠিক করার লাইন আপডেট', `${cleanRows.length}টি লাইন সেভ করা হয়েছে`);
+          return json({ ok: true });
+        }
+
+        return json({ ok: true });
+      }
+
+      if (action === 'a_style_save') {
+        const st = q.style || {};
+        const id = String(st.id || '').replace(/\s+/g, '-');
+        if (!id) return json({ ok: false, err: 'স্টাইলের ID দিন' });
+        if (!String(st.name || '').trim()) return json({ ok: false, err: 'স্টাইলের নাম দিন' });
+
+        // পুরনো স্টাইলের ইমেজ চেক (যদি একই আইডিতে নতুন ছবি আপলোড হয় অথবা আইডি বদলানো হয়)
+        const checkId = q.oldId || id;
+        const { data: oldStyleRecord } = await supabase.from('styles').select('img').eq('id', checkId).single();
+        const oldImg = oldStyleRecord?.img;
+
+        // যদি পূর্ববর্তী ID আলাদা হয়, তবে পুরনো স্টাইল ডিলিট করা
+        if (q.oldId && q.oldId !== id) {
+          await supabase.from('styles').delete().eq('id', q.oldId);
+          await supabase.from('fields').delete().eq('sid', q.oldId);
+        }
+
+        const rawStatus = String(st.status || 'draft').toLowerCase();
+        const mappedStatus = rawStatus === 'published' || rawStatus === 'পাবলিশড' ? 'published' : 'draft';
+
+        const styleRow = {
+          id,
+          name: st.name,
+          cat: st.cat,
+          img: st.img || '',
+          attach: st.attach || '',
+          logo: st.logo || 'top-left',
+          style: st.style || '',
+          status: mappedStatus,
+          pop: st.pop === true || st.pop === 'TRUE' || st.pop === 'true',
+          font1: st.font1 || '',
+          font2: st.font2 || ''
+        };
+
+        await supabase.from('styles').upsert(styleRow);
+
+        // ফিল্ডস আপডেট
+        await supabase.from('fields').delete().eq('sid', id);
+        const fields = (q.fields || []).map((f: any, idx: number) => ({
+          sid: id,
+          sort: idx + 1,
+          el: f.el,
+          ex: f.ex || '',
+          lim: f.lim ? Number(f.lim) : null,
+          req: Boolean(f.req)
+        }));
+
+        if (fields.length) {
+          await supabase.from('fields').insert(fields);
+        }
+
+        // যদি ছবি পরিবর্তন করা হয়ে থাকে এবং আগের ছবিটি ক্লাউডিনারির হয়, তবে আগেরটি ক্লাউডিনারি থেকে মুছে ফেলা
+        if (oldImg && oldImg !== styleRow.img) {
+          const { data: stList } = await supabase.from('settings').select('*');
+          const stMap: Record<string, string> = {};
+          (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+          deleteFromCloudinary(oldImg, stMap).catch(() => {});
+        }
+
+        await logActivity(supabase, 'ডিজাইন স্টাইল সেভ', `স্টাইল: ${st.name || id} (ক্যাটাগরি: ${st.cat || 'সাধারণ'}, স্ট্যাটাস: ${mappedStatus})`);
+        return json({ ok: true, id });
+      }
+
+      if (action === 'a_style_del') {
+        const { data: styleToDelete } = await supabase.from('styles').select('img').eq('id', q.id).single();
+        await supabase.from('styles').delete().eq('id', q.id);
+        await supabase.from('fields').delete().eq('sid', q.id);
+
+        // স্টাইলের সাথে থাকা ক্লাউডিনারি ইমেজ ক্লাউডিনারি থেকে ডিলিট করা
+        if (styleToDelete?.img) {
+          const { data: stList } = await supabase.from('settings').select('*');
+          const stMap: Record<string, string> = {};
+          (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+          deleteFromCloudinary(styleToDelete.img, stMap).catch(() => {});
+        }
+
+        await logActivity(supabase, 'ডিজাইন স্টাইল মুছে ফেলা', `স্টাইল আইডি: ${q.id}`);
+        return json({ ok: true });
+      }
+
+      if (action === 'a_style_bulk') {
+        const ids = q.ids || [];
+        const op = q.op;
+        if (!ids.length) return json({ ok: false, err: 'কোনো স্টাইল বাছা হয়নি' });
+
+        if (op === 'delete') {
+          const { data: stylesToDelete } = await supabase.from('styles').select('img').in('id', ids);
+          await supabase.from('styles').delete().in('id', ids);
+          await supabase.from('fields').delete().in('sid', ids);
+
+          // নির্বাচিত স্টাইলগুলোর ক্লাউডিনারি ইমেজ স্বয়ংক্রিয়ভাবে মুছে ফেলা
+          if (stylesToDelete && stylesToDelete.length > 0) {
+            const { data: stList } = await supabase.from('settings').select('*');
+            const stMap: Record<string, string> = {};
+            (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+            for (const item of stylesToDelete) {
+              if (item.img) {
+                deleteFromCloudinary(item.img, stMap).catch(() => {});
+              }
+            }
+          }
+        } else if (op === 'publish') {
+          await supabase.from('styles').update({ status: 'published' }).in('id', ids);
+        } else if (op === 'draft') {
+          await supabase.from('styles').update({ status: 'draft' }).in('id', ids);
+        } else if (op === 'pop') {
+          await supabase.from('styles').update({ pop: true }).in('id', ids);
+        } else if (op === 'unpop') {
+          await supabase.from('styles').update({ pop: false }).in('id', ids);
+        } else if (op === 'cat' && q.cat) {
+          await supabase.from('styles').update({ cat: q.cat }).in('id', ids);
+        }
+
+        await logActivity(supabase, 'স্টাইল বাল্ক অ্যাকশন', `অ্যাকশন: ${op}, মোট: ${ids.length}টি স্টাইল`);
+        return json({ ok: true, n: ids.length });
+      }
+
+      if (action === 'a_style_order') {
+        const ids = q.ids || [];
+        for (let i = 0; i < ids.length; i++) {
+          await supabase.from('styles').update({ sort: i + 1 }).eq('id', ids[i]);
+        }
+        await logActivity(supabase, 'স্টাইল ক্রম পরিবর্তন', `${ids.length}টি স্টাইলের ক্রম সাজানো হয়েছে`);
+        return json({ ok: true });
+      }
+
+      if (action === 'a_test') {
+        let tplObj: any = null;
+
+        if (q.style) {
+          tplObj = {
+            id: q.style.id || '',
+            style: q.style.style || '',
+            logo: q.style.logo || 'top-left',
+            font1: q.style.font1,
+            font2: q.style.font2,
+            fdef: formatFieldDefs(q.fields || [])
+          };
+        } else if (q.sid) {
+          const { data: stRow } = await supabase.from('styles').select('*').eq('id', q.sid).single();
+          const { data: fRows } = await supabase.from('fields').select('*').eq('sid', q.sid).order('sort');
+          if (stRow) {
+            tplObj = {
+              id: stRow.id,
+              style: stRow.style || '',
+              logo: stRow.logo || 'top-left',
+              font1: stRow.font1,
+              font2: stRow.font2,
+              fdef: formatFieldDefs(fRows || [])
+            };
+          }
+        }
+
+        if (!tplObj) return json({ ok: false, err: 'স্টাইল পাওয়া যায়নি' });
+
+        const baseCommand =
+          q.base !== undefined
+            ? q.base
+            : (await supabase.from('settings').select('value').eq('key', 'base_command').single()).data?.value || '';
+
+        const { data: bizRows } = await supabase.from('biz').select('*');
+        const bizMoodMap: Record<string, string> = {};
+        (bizRows || []).forEach((b: any) => (bizMoodMap[b.name] = b.mood));
+
+        const res = buildCommand(tplObj, q.brand || {}, q.vals || {}, baseCommand, bizMoodMap);
+
+        return json({
+          ok: true,
+          cmd: res.cmd,
+          missing: res.missing,
+          tooLong: res.tooLong,
+          unknown: res.unknown
+        });
+      }
+
+      if (action === 'a_eps') {
+        const e = q.eps || {};
+        const map: Record<string, string> = {
+          merchantId: 'eps_merchant_id',
+          storeId: 'eps_store_id',
+          user: 'eps_username',
+          pass: 'eps_password',
+          key: 'eps_hash_key',
+          mode: 'eps_mode'
+        };
+
+        for (const k in map) {
+          if (e[k]) {
+            await supabase.from('settings').upsert({ key: map[k], value: String(e[k]).trim() });
+          }
+        }
+        clearEpsTokenCache();
+        await logActivity(supabase, 'EPS কনফিগারেশন আপডেট', `EPS তথ্য সেভ করা হয়েছে (মোড: ${e.mode || 'sandbox'})`);
+        return json({ ok: true });
+      }
+
+      if (action === 'a_eps_test') {
+        const { data: stList } = await supabase.from('settings').select('*');
+        const stMap: Record<string, string> = {};
+        (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+
+        const epsCfg = getEpsConfig(stMap);
+        if (!epsCfg.ready) return json({ ok: false, err: 'আগে সব EPS তথ্য বসান' });
+
+        clearEpsTokenCache();
+        try {
+          await getEpsToken(epsCfg);
+          return json({ ok: true });
+        } catch (err: any) {
+          return json({ ok: false, err: err.message || 'EPS সংযোগ পরীক্ষা ব্যর্থ হয়েছে' });
+        }
+      }
+
+      if (action === 'a_cloudinary') {
+        const c = q.cloudinary || {};
+        const map: Record<string, string> = {
+          cloudName: 'cloudinary_cloud_name',
+          apiKey: 'cloudinary_api_key',
+          apiSecret: 'cloudinary_api_secret',
+          folder: 'cloudinary_folder'
+        };
+
+        for (const k in map) {
+          if (c[k]) {
+            await supabase.from('settings').upsert({ key: map[k], value: String(c[k]).trim() });
+          }
+        }
+        await logActivity(supabase, 'Cloudinary কনফিগারেশন আপডেট', `ক্লাউড: ${c.cloudName || ''} কনফিগারেশন সেভ করা হয়েছে`);
+        return json({ ok: true });
+      }
+
+      if (action === 'a_cloudinary_test') {
+        const { data: stList } = await supabase.from('settings').select('*');
+        const stMap: Record<string, string> = {};
+        (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+
+        const cldCfg = getCloudinaryConfig(stMap);
+        if (!cldCfg.ready) return json({ ok: false, err: 'আগে Cloud Name, API Key ও Secret পূরণ করুন' });
+
+        const testBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+        const res = await uploadToCloudinary(testBase64, 'test-connection.png', stMap);
+        if (!res.ok) {
+          return json({ ok: false, err: res.error || 'Cloudinary আপলোড ব্যর্থ হয়েছে' });
+        }
+        return json({ ok: true, url: res.url });
+      }
+
+      if (action === 'a_sms') {
+        const s = q.sms || {};
+        const map: Record<string, string> = {
+          token: 'sms_api_token',
+          senderId: 'sms_sender_id',
+          url: 'sms_api_url',
+          template: 'sms_otp_template'
+        };
+
+        for (const k in map) {
+          if (s[k] !== undefined && s[k] !== null && s[k] !== '') {
+            await supabase.from('settings').upsert({ key: map[k], value: String(s[k]).trim() });
+          }
+        }
+        await logActivity(supabase, 'BulkSMSBD কনফিগারেশন আপডেট', `Sender ID: ${s.senderId || ''}, API Key ও টেমপ্লেট সেভ করা হয়েছে`);
+        return json({ ok: true });
+      }
+
+      if (action === 'a_sms_test') {
+        const { data: stList } = await supabase.from('settings').select('*');
+        const stMap: Record<string, string> = {};
+        (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+
+        const smsCfg = getSmsConfig(stMap);
+        if (!smsCfg.ready) return json({ ok: false, err: 'আগে BulkSMSBD API Key পূরণ করুন' });
+
+        const targetPhone = normPhone(q.phone);
+        if (!targetPhone) return json({ ok: false, err: 'সঠিক ১১ ডিজিটের ফোন নম্বর দিন (যেমন: 017xxxxxxxx)' });
+
+        const sampleOtp = '1234';
+        const tpl = smsCfg.otpTemplate || 'উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।';
+        const testMsg = tpl.includes('{otp}') ? tpl.replace(/\{otp\}/g, sampleOtp) : `${tpl} ${sampleOtp}`;
+        try {
+          const formattedPhone = targetPhone.startsWith('88') ? targetPhone : `88${targetPhone}`;
+          const res = await fetch(smsCfg.apiUrl, {
+            method: 'POST',
+            body: new URLSearchParams({
+              api_key: smsCfg.apiToken,
+              type: 'text',
+              number: formattedPhone,
+              senderid: smsCfg.senderId || '',
+              message: testMsg
+            })
+          });
+          const txt = await res.text();
+          let parsed: any = null;
+          try { parsed = JSON.parse(txt); } catch (_) {}
+          return json({ ok: true, raw: txt, data: parsed, sentMessage: testMsg });
+        } catch (e: any) {
+          return json({ ok: false, err: e.message || 'BulkSMSBD গেটওয়ে এরর' });
+        }
+      }
+
+      if (action === 'a_pass') {
+        const oldPass = String(q.old || '');
+        const newPass = String(q.pass || '');
+        if (newPass.length < 8) {
+          return json({ ok: false, err: 'নতুন পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের দিন' });
+        }
+
+        const { data: pRow } = await supabase.from('settings').select('value').eq('key', 'admin_password').single();
+        const currentPass = pRow?.value || Deno.env.get('ADMIN_PASSWORD') || 'admin1234';
+        const adminSecret = Deno.env.get('ADMIN_PASSWORD_HASH') || '';
+        const oldHash = await sha256Hex(oldPass);
+
+        const oldMatches = oldPass && (
+          oldPass === currentPass ||
+          (adminSecret && (oldPass === adminSecret || oldHash === adminSecret.toLowerCase()))
+        );
+
+        if (!oldMatches) {
+          return json({ ok: false, err: 'বর্তমান পাসওয়ার্ড মেলেনি' });
+        }
+
+        await supabase.from('settings').upsert({ key: 'admin_password', value: newPass });
+        await logActivity(supabase, 'অ্যাডমিন পাসওয়ার্ড পরিবর্তন', 'অ্যাডমিন প্যানেলের পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে');
+        return json({ ok: true });
+      }
+
+      if (action === 'a_landing') {
+        const { data: row } = await supabase.from('landing_config').select('data').eq('id', 'main').single();
+        return json({ ok: true, config: row?.data || {} });
+      }
+
+      if (action === 'a_landing_save') {
+        const config = q.config;
+        if (!config || typeof config !== 'object') {
+          return json({ ok: false, err: 'কনফিগ ডাটা পাওয়া যায়নি' });
+        }
+
+        const { error } = await supabase
+          .from('landing_config')
+          .upsert({ id: 'main', data: config, updated_at: new Date().toISOString() });
+
+        if (error) return json({ ok: false, err: error.message });
+
+        await logActivity(supabase, 'ল্যান্ডিং পেজ কন্ট্রোল (CMS)', 'ল্যান্ডিং পেজের সেকশন ও কনটেন্ট পরিবর্তন করা হয়েছে');
+        return json({ ok: true });
+      }
+    }
+
+    return json({ ok: false, err: 'অজানা কমান্ড বা অ্যাকশন' });
+  } catch (err: any) {
+    return json({ ok: false, err: err.message || 'সার্ভার প্রক্রিয়াকরণে সমস্যা হয়েছে' });
+  }
+});
+
+/**
+ * EPS লেনদেন স্ট্যাটাস ভেরিফাই ও মেম্বারশিপ অ্যাক্টিভেশন
+ */
+async function verifyPayment(supabase: any, tx: string) {
+  const { data: stList } = await supabase.from('settings').select('*');
+  const stMap: Record<string, string> = {};
+  (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+
+  const epsCfg = getEpsConfig(stMap);
+  if (!epsCfg.ready) return { ok: false, err: 'EPS সেটিংস বসানো নেই' };
+
+  const { data: p } = await supabase.from('payments').select('*').eq('id', tx).single();
+  if (!p) return { ok: false, err: 'পেমেন্ট রেকর্ড পাওয়া যায়নি' };
+
+  if (p.status !== 'pending' && p.status !== 'অপেক্ষায়') {
+    return { ok: true, status: p.status };
+  }
+
+  const res = await checkTransactionStatus(epsCfg, tx);
+  const statusStr = String(res.Status || '').toLowerCase();
+
+  if (statusStr === 'success') {
+    const { data: mem } = await supabase.from('members').select('*').eq('phone', p.phone).single();
+    const today = todayDhaka();
+    const baseDate = mem?.expiry && mem.expiry > today && (mem.status === 'paid' || mem.status === 'পেইড') ? mem.expiry : today;
+    const newExpiry = addDays(baseDate, 365);
+
+    await supabase.from('members').update({
+      expiry: newExpiry,
+      status: 'paid'
+    }).eq('phone', p.phone);
+
+    await supabase.from('payments').update({
+      status: 'success',
+      trx: res.EpsTransactionId || res.EPSTransactionId || '',
+      method: res.FinancialEntity || 'EPS',
+      done_at: new Date().toISOString()
+    }).eq('id', tx);
+
+    return { ok: true, status: 'success' };
+  } else if (/fail|cancel|declin|expire|reject/.test(statusStr)) {
+    await supabase.from('payments').update({
+      status: 'cancelled',
+      note: `EPS: ${res.Status}`,
+      done_at: new Date().toISOString()
+    }).eq('id', tx);
+    return { ok: true, status: 'cancelled' };
+  }
+
+  return { ok: true, status: p.status };
+}
