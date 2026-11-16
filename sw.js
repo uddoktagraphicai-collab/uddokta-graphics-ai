@@ -16,7 +16,6 @@ self.addEventListener('install', function (e) {
       '/manifest.json',
       '/images/icon-192.png',
       '/images/icon-512.png',
-      '/images/logos/Uddokta%20Graphic%20Ai-01.png',
       '/images/logos/logo.png',
       '/images/hero/hero-main.jpg',
       '/images/hero/hero-left.jpg',
