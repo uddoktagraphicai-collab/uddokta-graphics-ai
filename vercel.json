@@ -58,6 +58,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api/:path*"
+    },
+    {
+      "source": "/api",
+      "destination": "https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api"
+    },
+    {
       "source": "/samples/:path*",
       "destination": "/images/samples/:path*"
     },

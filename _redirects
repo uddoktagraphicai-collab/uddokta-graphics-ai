@@ -1,3 +1,5 @@
+/api/*    https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api/:splat  200!
+/api      https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api         200!
 /samples/*  /images/samples/:splat  200
 /logos/*    /images/logos/:splat    200
 /app/*      /app.html               200

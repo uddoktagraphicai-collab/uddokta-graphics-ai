@@ -8,6 +8,8 @@
   RewriteRule ^ - [L]
 
   # Samples & Logos rewrites
+  RewriteRule ^api/?$ https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api [P,L]
+  RewriteRule ^api/(.*)$ https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api/$1 [P,L]
   RewriteRule ^samples/(.*)$ images/samples/$1 [L]
   RewriteRule ^logos/(.*)$ images/logos/$1 [L]
 

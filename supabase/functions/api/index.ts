@@ -760,8 +760,21 @@ Deno.serve(async (req: Request) => {
       const price = Number(stMap.price) || 399;
 
       const tx = String(Date.now()) + String(Math.floor(100 + Math.random() * 900));
-      const selfUrl = url.origin + url.pathname;
-      const returnUrl = `${selfUrl}?eps=back&tx=${tx}`;
+      
+      // EPS requires returnUrl domain to match the registered merchant BaseUrl (e.g. ecomdesignsolution.com)
+      let returnBase = '';
+      const appUrlSetting = stMap.app_url || Deno.env.get('APP_URL') || '';
+      if (appUrlSetting) {
+        try {
+          const u = new URL(appUrlSetting);
+          const host = u.host.replace(/^www\./i, '');
+          returnBase = `${u.protocol}//${host}/api`;
+        } catch {}
+      }
+      if (!returnBase) {
+        returnBase = 'https://ecomdesignsolution.com/api';
+      }
+      const returnUrl = `${returnBase}?eps=back&tx=${tx}`;
 
       try {
         const initRes = await initializePayment(epsCfg, tx, price, member, returnUrl);
