@@ -190,12 +190,29 @@ Deno.serve(async (req: Request) => {
 
   // EPS Redirect Callback (?eps=back)
   if (url.searchParams.get('eps') === 'back') {
-    const rawTx = url.searchParams.get('tx') || url.searchParams.get('merchantTransactionId') || '';
+    const rawTx =
+      url.searchParams.get('tx') ||
+      url.searchParams.get('MerchantTransactionId') ||
+      url.searchParams.get('merchantTransactionId') ||
+      '';
     const m = rawTx.match(/^\d{10,}/);
     const tx = m ? m[0] : '';
 
+    const paramStatus = String(url.searchParams.get('Status') || url.searchParams.get('status') || '').toLowerCase();
+
     let verifyStatus = 'pending';
-    if (tx) {
+    if (paramStatus === 'aborted' || paramStatus === 'cancelled' || paramStatus === 'failed') {
+      verifyStatus = 'cancelled';
+      if (tx) {
+        try {
+          await supabase.from('payments').update({
+            status: 'cancelled',
+            note: 'EPS: ' + (url.searchParams.get('Message') || paramStatus),
+            done_at: new Date().toISOString()
+          }).eq('id', tx);
+        } catch {}
+      }
+    } else if (tx) {
       try {
         const v = await verifyPayment(supabase, tx);
         verifyStatus = v.status;
@@ -203,33 +220,23 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data: stRow } = await supabase.from('settings').select('value').eq('key', 'app_url').single();
-    const appUrl = stRow?.value || Deno.env.get('APP_URL') || '';
+    let appUrl = stRow?.value || Deno.env.get('APP_URL') || '';
+    if (!appUrl) {
+      appUrl = 'https://www.ecomdesignsolution.com/app';
+    }
 
     const isOk = verifyStatus === 'success' || verifyStatus === 'সফল';
     const isFail = verifyStatus === 'cancelled' || verifyStatus === 'বাতিল';
-    const title = isOk ? 'পেমেন্ট সফল হয়েছে ✓' : isFail ? 'পেমেন্ট হয়নি' : 'পেমেন্ট যাচাই হচ্ছে';
-    const sub = isOk
-      ? 'আপনার মেম্বারশিপ চালু হয়ে গেছে। অ্যাপে ফিরে ব্র্যান্ড সেটআপ করুন।'
-      : isFail
-      ? 'টাকা কাটা হয়নি। অ্যাপে ফিরে আবার চেষ্টা করতে পারেন।'
-      : 'কয়েক সেকেন্ডের মধ্যে চালু হয়ে যাবে। অ্যাপে ফিরে "চালু হয়েছে কিনা দেখুন" চাপুন।';
 
-    const redirectLink = appUrl
-      ? `${appUrl}${appUrl.includes('?') ? '&' : '?'}pay=back&st=${isOk ? 'ok' : isFail ? 'fail' : 'wait'}#${isOk ? 'paid' : 'member'}`
-      : '';
+    const redirectLink = `${appUrl}${appUrl.includes('?') ? '&' : '?'}pay=back&st=${isOk ? 'ok' : isFail ? 'fail' : 'wait'}#${isOk ? 'paid' : 'member'}`;
 
-    const pageHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
-<body style="margin:0;background:#151518;color:#F5F5F7;font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;padding:24px;box-sizing:border-box;text-align:center">
-  <div style="max-width:380px">
-    <div style="font-size:48px;color:${isOk ? '#34C77B' : isFail ? '#F0606A' : '#F39200'}">${isOk ? '✓' : isFail ? '✕' : '…'}</div>
-    <h1 style="font-size:22px;margin:12px 0 8px">${title}</h1>
-    <p style="color:#C9CAD2;font-size:15px;line-height:1.6">${sub}</p>
-    ${redirectLink ? `<a href="${redirectLink}" target="_top" style="display:block;margin-top:22px;background:#F39200;color:#16110A;text-decoration:none;font-weight:700;padding:15px;border-radius:8px;font-size:17px">অ্যাপে ফিরে যান</a>` : ''}
-  </div>
-  ${redirectLink ? `<script>setTimeout(function(){try{window.top.location.href=${JSON.stringify(redirectLink)}}catch(e){}},1600);</script>` : ''}
-</body></html>`;
-
-    return html(pageHtml);
+    return new Response(null, {
+      status: 302,
+      headers: {
+        'Location': redirectLink,
+        'Cache-Control': 'no-cache, no-store, must-revalidate'
+      }
+    });
   }
 
   // রিকোয়েস্ট বডি বা কুয়েরি পার্সিং
