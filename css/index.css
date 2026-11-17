@@ -391,3 +391,11 @@ footer{border-top:1px solid var(--line);padding-block:28px;font-size:15px;color:
 /* --- ১৩. অটো স্মুথ স্ক্রলিং ও হেডার অফসেট --- */
 html{scroll-behavior:smooth;scroll-padding-top:calc(var(--nav-h) + 16px)}
 [id]{scroll-margin-top:calc(var(--nav-h) + 16px)}
+
+/* --- মাউস কার্সর ও ইন্টারঅ্যাকশন স্টেট --- */
+a, button, .btn, label[for], summary {
+  cursor: pointer;
+}
+:disabled, [disabled], .btn.off, .btn:disabled {
+  cursor: not-allowed !important;
+}

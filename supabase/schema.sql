@@ -83,8 +83,12 @@ create table if not exists members (
   made int not null default 0,
   note text not null default '',
   verified boolean not null default false,
-  password_hash text not null default ''
+  password_hash text not null default '',
+  logo_url text not null default '',
+  brand_unlocked boolean not null default false
 );
+
+alter table if exists members add column if not exists brand_unlocked boolean not null default false;
 
 -- ৮. পেমেন্ট হিস্ট্রি (EPS Transactions)
 create table if not exists payments (
@@ -298,9 +302,118 @@ as $$
   from members;
 $$;
 
+-- ব্র্যান্ড এডিট আনলক টগল RPC
+create or replace function admin_toggle_brand_unlock(p_phone text, p_unlocked boolean)
+returns json
+language plpgsql
+security definer
+as $$
+begin
+  update members
+  set brand_unlocked = p_unlocked,
+      note = case 
+        when p_unlocked and coalesce(note, '') not like '%[UNLOCKED]%' then trim(coalesce(note, '') || ' [UNLOCKED]')
+        when not p_unlocked then trim(replace(coalesce(note, ''), '[UNLOCKED]', ''))
+        else note
+      end
+  where phone = p_phone;
+
+  return json_build_object('ok', true, 'unlocked', p_unlocked);
+end;
+$$;
+
+-- ড্যাশবোর্ড পরিসংখ্যান RPC (আজকের আয়, সেলস, নতুন মেম্বার ও রিনিউয়াল তালিকা)
+create or replace function get_admin_dashboard_stats()
+returns json
+language plpgsql
+security definer
+as $$
+declare
+  v_today date := (now() at time zone 'Asia/Dhaka')::date;
+  v_today_rev numeric := 0;
+  v_today_sales int := 0;
+  v_today_new_members int := 0;
+  v_expiring_members json;
+begin
+  select coalesce(sum(amount), 0), count(*)
+  into v_today_rev, v_today_sales
+  from payments
+  where status in ('success', 'সফল', 'পেইড')
+    and (created_at at time zone 'Asia/Dhaka')::date = v_today;
+
+  select count(*)
+  into v_today_new_members
+  from members
+  where joined = v_today;
+
+  select coalesce(json_agg(t), '[]'::json)
+  into v_expiring_members
+  from (
+    select phone, coalesce(brand, '') as brand, coalesce(biz, '') as biz, expiry::text, (expiry - v_today) as days_left
+    from members
+    where status in ('paid', 'পেইড')
+      and expiry >= v_today
+      and expiry <= (v_today + interval '15 days')::date
+    order by expiry asc
+    limit 10
+  ) t;
+
+  return json_build_object(
+    'today_rev', v_today_rev,
+    'today_sales', v_today_sales,
+    'today_new_members', v_today_new_members,
+    'expiring_members', coalesce(v_expiring_members, '[]'::json)
+  );
+end;
+$$;
+
+-- ১৭. লাইভ প্রোডাকশন ক্লিন রিসেট (সকল টেস্ট মেম্বার ও ট্রানজ্যাকশন ডেটা মুছে ফ্রেশ শুরু)
+create or replace function admin_reset_test_data()
+returns json
+language plpgsql
+security definer
+as $$
+declare
+  v_del_pays int := 0;
+  v_del_mems int := 0;
+  v_del_otps int := 0;
+begin
+  -- ১. প্রথমে পেমেন্ট হিস্ট্রি ডিলিট
+  with p as (delete from payments where id is not null returning 1)
+  select count(*) into v_del_pays from p;
+
+  -- ২. সব মেম্বার ডিলিট
+  with m as (delete from members where phone is not null returning 1)
+  select count(*) into v_del_mems from m;
+
+  -- ৩. ওটিপি কোড ডিলিট
+  with o as (delete from otp_codes where phone is not null returning 1)
+  select count(*) into v_del_otps from o;
+
+  -- ৪. স্টাইলের ব্যবহার কাউন্টার শূন্য করা
+  update styles set used = 0 where id is not null;
+
+  -- ৫. লগ ক্লিয়ার করে ফ্রেশ রিসেট এন্ট্রি রাখা
+  delete from log where id is not null;
+  insert into log (who, action, detail, at)
+  values ('admin', 'সিস্টেম ফ্রেশ রিসেট', 'টেস্টিং মেম্বার ও ট্রানজ্যাকশন ডেটা মুছে প্রডাকশনের জন্য ফ্রেশ করা হয়েছে।', now());
+
+  return json_build_object(
+    'ok', true,
+    'message', 'সব টেস্ট ডেটা সফলভাবে মুছে সিস্টেম ফ্রেশ করা হয়েছে',
+    'deleted_payments', v_del_pays,
+    'deleted_members', v_del_mems,
+    'deleted_otps', v_del_otps
+  );
+end;
+$$;
+
 grant execute on function check_member_auth(text) to anon, authenticated, service_role;
 grant execute on function set_member_password(text, text) to anon, authenticated, service_role;
 grant execute on function verify_member_password(text, text) to anon, authenticated, service_role;
 grant execute on function admin_toggle_verify(text, boolean) to anon, authenticated, service_role;
 grant execute on function admin_reset_member_auth(text) to anon, authenticated, service_role;
 grant execute on function get_members_auth_map() to anon, authenticated, service_role;
+grant execute on function admin_toggle_brand_unlock(text, boolean) to anon, authenticated, service_role;
+grant execute on function get_admin_dashboard_stats() to anon, authenticated, service_role;
+grant execute on function admin_reset_test_data() to anon, authenticated, service_role;

@@ -115,7 +115,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
   .side{display:flex;flex-direction:column;position:fixed;left:0;top:0;bottom:0;width:248px;background:var(--bg2);border-right:1px solid var(--line);padding:22px 16px}
   .side .brandmark{padding:0 8px 22px;border-bottom:1px solid var(--line);margin-bottom:16px}
   .side .brandmark img{width:36px;height:36px}
-  .nav a{display:flex;align-items:center;gap:12px;height:46px;padding:0 12px;border-radius:8px;color:var(--ink2);text-decoration:none;font-size:15.5px;margin-bottom:4px}
+  .nav a{display:flex;align-items:center;gap:12px;height:46px;padding:0 12px;border-radius:8px;color:var(--ink2);text-decoration:none;font-size:15.5px;margin-bottom:4px;cursor:pointer}
   .nav a svg{width:21px;height:21px}
   .nav a.on{background:var(--card);color:var(--ink);box-shadow:inset 3px 0 0 var(--or)}
   .nav a.on svg{color:var(--or)}
@@ -129,7 +129,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
   .me{display:flex;align-items:center;gap:10px;margin-top:12px;padding:10px 8px 0;border-top:1px solid var(--line)}
   .me .av{width:34px;height:34px;border-radius:8px;background:#F5EBD7;color:#2E6B3A;display:grid;place-items:center;font-size:16px;font-weight:700}
   .me div{font-size:14px;line-height:1.3}.me small{display:block;color:var(--mut);font-size:12.5px}
-  .me a{margin-left:auto;color:var(--mut)}.me a svg{width:20px;height:20px}
+  .me a{margin-left:auto;color:var(--mut);cursor:pointer}.me a svg{width:20px;height:20px}
 
   .main,.wmain{padding:40px 56px 64px;max-width:1220px}
   .lhead{display:flex;align-items:flex-end;justify-content:space-between;gap:24px}
@@ -192,11 +192,11 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
 .st .lk{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:6px;background:rgba(21,21,24,.88);border:1px solid rgba(255,255,255,.14);display:grid;place-items:center;color:var(--ink)}
 .st .lk svg{width:15px;height:15px}
 .btn.sec{background:transparent;border:1px solid var(--line);color:var(--ink)}
-.btn.off{background:var(--card2);color:#6C6D76;border:1px solid var(--line);cursor:default}
+.btn.off{background:var(--card2);color:#6C6D76;border:1px solid var(--line);cursor:not-allowed}
 .btn.done{background:rgba(52,199,123,.12);color:var(--ok);border:1px solid rgba(52,199,123,.4)}
 .btn.lkb{background:var(--or)}
 .btn+.btn{margin-top:10px}
-.in[disabled]{opacity:1;color:#6C6D76}
+.in[disabled],.in:disabled{opacity:1;color:#6C6D76;cursor:not-allowed}
 .lockbar{display:flex;gap:12px;align-items:center;padding:14px 16px;border-radius:12px;border:1px solid rgba(243,146,0,.35);background:rgba(243,146,0,.06);margin-top:18px}
 .lockbar svg{width:20px;height:20px;color:var(--or);flex:none}
 .lockbar b{display:block;font-size:15.5px}
@@ -629,9 +629,9 @@ body.zv-on{overflow:hidden}
 .up:active{transform:scale(.985)}
 .tabs a{transition:color .15s ease,transform .15s ease}
 .tabs a:active{transform:scale(.92)}
-.side nav a{transition:background .16s ease,color .16s ease,transform .16s ease}
+.side nav a{transition:background .16s ease,color .16s ease,transform .16s ease;cursor:pointer}
 @media(hover:hover){
-  .side nav a:hover{background:rgba(255,255,255,.05);color:var(--ink);transform:translateX(3px)}
+  .side nav a:hover{background:rgba(255,255,255,.05);color:var(--ink);transform:translateX(3px);cursor:pointer}
 }
 .side nav a:active{transform:scale(.98)}
 .in{transition:border-color .18s ease,box-shadow .18s ease}
@@ -657,3 +657,13 @@ body.zv-on{overflow:hidden}
 @media(hover:hover){.eye-btn:hover{color:var(--ink);transform:translateY(-50%) scale(1.1)}}
 .eye-btn:active{transform:translateY(-50%) scale(.92)}
 .eye-btn svg{width:20px;height:20px;flex:none}
+
+/* --- গ্লোবাল মাউস কার্সর ও ইন্টারঅ্যাকশন স্টেট (Full Application Cursors) --- */
+a, [data-go], [onclick], button, .btn, label[for], .ghost, .fixlink, .bedit, .tabs2 a, .tabs a, .links a, .card h3 a, select, .sel select, input[type=checkbox], input[type=radio], input[type=color], .shp, .st, .up1, .chip, .lockbar, .hb, .back, .zx, .lback, .eye-btn, tr[data-go], .me a {
+  cursor: pointer;
+}
+
+/* ডিসেবলড ও ইনঅ্যাক্টিভ স্টেট (Disabled Cursor Feedback) */
+:disabled, [disabled], .btn.off, .btn.disabled, .btn[disabled], button:disabled, input:disabled, select:disabled, textarea:disabled, .in:disabled, .in[disabled], .lockv, [aria-disabled="true"] {
+  cursor: not-allowed !important;
+}

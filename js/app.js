@@ -119,7 +119,11 @@ function getSha256(text) {
 function api(action, data) {
   data = data || {}; data.action = action;
   if (window.MOCK) return MOCK(data);
-  return fetch(API_URL + '?q=' + encodeURIComponent(JSON.stringify(data)) + '&t=' + Date.now()).then(function (r) { return r.text(); }).then(function (t) {
+  return fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }).then(function (r) { return r.text(); }).then(function (t) {
     try { return JSON.parse(t); } catch (e) { throw new Error((T('t50b6ef8a', 'সার্ভার থেকে ভুল উত্তর:') + ' ') + t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 90)); }
   });
 }
@@ -698,61 +702,139 @@ V.paid = function () {
 function setupState() {
   if (S.setup) return S.setup;
   var m = M();
-  S.setup = { name: m.brand || '', tag: m.tagline || '', biz: m.biz || '', colors: m.c1 ? [m.c1, m.c2, m.c3] : [], shape: m.shape || 'square', logo: LS.get('eds_logo') || '' };
+  S.setup = { name: m.brand || '', tag: m.tagline || '', biz: m.biz || '', colors: m.c1 ? [m.c1, m.c2, m.c3] : [], shape: m.shape || 'square', logo: m.logo_url || LS.get('eds_logo') || '' };
   return S.setup;
 }
 V.setup = function () {
   var s = setupState(), m = M(), biz = (S.c && S.c.biz) || [];
+  var isUnlocked = !!(m.brand_unlocked || (m.note && m.note.indexOf('[UNLOCKED]') > -1));
+  var isLocked = !!(m.brand && !isUnlocked);
   var SH = [['wide', (T('tfc8fd0be', 'চওড়া')), 'width:44px;height:18px'], ['square', (T('tbdd31078', 'চৌকো')), 'width:28px;height:28px'], ['tall', (T('t67bca444', 'লম্বা')), 'width:18px;height:36px']];
-  var cols = s.colors.length ? '<div class="cols">' + s.colors.map(function (c, i) { return '<div><span style="background:' + esc(c) + '"></span><em>' + esc(c) + '</em><input type="color" value="' + esc(c) + '" oninput="setColor(' + i + ',this.value)"></div>'; }).join('') + ('</div><p class="hint">' + T('tc35c4b67', 'রঙে চেপে বদলাতে পারবেন') + '</p>') : ('<p class="hint" style="margin-top:0">' + T('te19b54d7', 'লোগো দিলে রং নিজে থেকে বের হয়ে আসবে') + '</p>');
-  return wtop((T('tec0a11b4', 'ব্র্যান্ড সেটআপ'))) + '<div class="wmain">' + lback((T('tb2052257', 'ফিরে যান'))) + head((T('t18968120', 'আপনার *ব্র্যান্ড* সেটআপ', 'span')), (T('td0c3b535', 'শুধু একবার। এরপর প্রতিটা কমান্ডে এগুলো নিজে থেকেই বসে যাবে।'))) +
-    ('<div class="setgrid" style="margin-top:22px"><div class="card"><h3>' + T('tcc9293bb', 'লোগো') + '</h3><div style="height:12px"></div><label class="up1" for="sfile"><div class="lg">') + (s.logo ? '<img src="' + s.logo + '" alt="">' : ('<b>' + T('tcc9293bb', 'লোগো') + '</b>')) + '</div><div><b>' + (s.logo ? (T('tdca652b2', 'লোগো নেওয়া হয়েছে ✓')) : (T('t460c9379', 'লোগোর ছবি দিন'))) + '</b>' + (s.logo ? (T('tc5ea0ba4', 'লোগো থেকে রং নিজে বের হয়ে গেছে')) : (T('t76422b4a', 'PNG বা JPG, সাদা বা স্বচ্ছ ব্যাকগ্রাউন্ড হলে ভালো'))) + '</div><span class="ghost">' + (s.logo ? (T('tebbe473a', 'বদলান')) : (T('t00685af0', 'বেছে নিন'))) + '</span></label><input type="file" accept="image/*" id="sfile" hidden onchange="pickLogo(this)">' +
-    ('<div class="fl"><label><span>' + T('t79ee0900', 'লোগোর আকার') + '</span></label><div class="shapes">') + SH.map(function (x) { return '<div class="shp' + (s.shape === x[0] ? ' on' : '') + '" onclick="setShape(\'' + x[0] + '\')"><i style="' + x[2] + '"></i>' + x[1] + '</div>'; }).join('') + '</div></div>' +
-    ('<div class="fl"><label><span>' + T('t97b81d98', 'ব্র্যান্ডের রং') + '</span>') + (s.colors.length ? ('<small>' + T('tef9bf36a', 'লোগো থেকে') + '</small>') : '') + '</label>' + cols + '</div></div>' +
-    ('<div class="card"><h3>' + T('t149ae164', 'ব্র্যান্ডের তথ্য') + '</h3><div class="fl"><label><span>' + T('t580a7bdc', 'ব্র্যান্ডের নাম') + '</span><small>' + T('td6835426', 'পরে বদলানো যাবে না') + '</small></label><input class="in" id="sname" value="') + esc(s.name) + '" ' + (m.brand ? 'disabled' : '') + (' oninput="S.setup.name=this.value" placeholder="' + T('tb64ace7b', 'যেমন: পল্লী বাজার') + '"></div>') +
-    ('<div class="fl"><label><span>' + T('t95505337', 'ট্যাগলাইন') + '<em>' + T('t34544152', 'ঐচ্ছিক') + '</em></span></label><input class="in" id="stag" value="') + esc(s.tag) + ('" oninput="S.setup.tag=this.value" placeholder="' + T('t238cd1bb', 'যেমন: খাঁটি গাওয়া ঘি আর অর্গানিক খাবার') + '"></div>') +
-    ('<div class="fl"><label><span>' + T('td62d06b4', 'ব্যবসার ধরন') + '</span></label><div class="sel"><select class="in" id="sbiz" onchange="S.setup.biz=this.value"><option value="">' + T('t00685af0', 'বেছে নিন') + '</option>') + biz.map(function (b) { return '<option' + (b === s.biz ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select></div></div>' +
-    ('<div class="cta" style="position:static;padding:0;border:0;background:none;margin-top:24px"><a class="btn" onclick="doSetup()">' + T('t8fa7b0ec', 'সেভ করে শুরু করুন')) + I.arr + '</a></div></div></div></div>';
+  var cols = s.colors.length ? '<div class="cols">' + s.colors.map(function (c, i) { return '<div><span style="background:' + esc(c) + '"></span><em>' + esc(c) + '</em>' + (!isLocked ? '<input type="color" value="' + esc(c) + '" oninput="setColor(' + i + ',this.value)">' : '') + '</div>'; }).join('') + '</div><p class="hint">' + (isLocked ? 'লোগো থেকে সংরক্ষিত ৩টি ব্র্যান্ড কালার' : T('tc35c4b67', 'রঙে চেপে বদলাতে পারবেন')) + '</p>' : '<p class="hint" style="margin-top:0">' + T('te19b54d7', 'লোগো দিলে রং নিজে থেকে বের হয়ে আসবে') + '</p>';
+  var logoBoxHtml = isLocked
+    ? '<div class="up1 disabled" style="cursor:not-allowed;opacity:0.9"><div class="lg">' + (s.logo ? '<img src="' + esc(s.logo) + '" alt="">' : '<b>' + T('tcc9293bb', 'লোগো') + '</b>') + '</div><div><b>' + (s.logo ? 'লোগো সংরক্ষিত ✓' : 'লোগো নেই') + '</b><span>লোগো লক করা আছে</span></div><span class="ghost" style="color:var(--ok);border-color:rgba(52,199,123,.3);background:rgba(52,199,123,.08);cursor:not-allowed">🔒 লকড</span></div>'
+    : '<label class="up1" for="sfile"><div class="lg">' + (s.logo ? '<img src="' + esc(s.logo) + '" alt="">' : ('<b>' + T('tcc9293bb', 'লোগো') + '</b>')) + '</div><div><b>' + (s.logo ? (T('tdca652b2', 'লোগো নেওয়া হয়েছে ✓')) : (T('t460c9379', 'লোগোর ছবি দিন'))) + '</b>' + (s.logo ? (T('tc5ea0ba4', 'লোগো থেকে রং নিজে বের হয়ে গেছে')) : (T('t76422b4a', 'PNG বা JPG, সাদা বা স্বচ্ছ ব্যাকগ্রাউন্ড হলে ভালো'))) + '</div><span class="ghost">' + (s.logo ? (T('tebbe473a', 'বদলান')) : (T('t00685af0', 'বেছে নিন'))) + '</span></label><input type="file" accept="image/*" id="sfile" hidden onchange="pickLogo(this)">';
+  var waText = 'আসসালামু আলাইকুম, আমি আমার উদ্যোক্তা গ্রাফিক্স অ্যাকাউন্টের (' + (S.phone || m.phone || '') + ') ব্র্যান্ড তথ্য বা লোগো পরিবর্তন করতে চাই।';
+  var ctaHtml = !isLocked
+    ? '<div class="cta" style="position:static;padding:0;border:0;background:none;margin-top:24px"><a class="btn" onclick="doSetup()">' + T('t8fa7b0ec', 'সেভ করে শুরু করুন') + I.arr + '</a></div>'
+    : '<div style="margin-top:24px;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px">' +
+        '<div style="display:flex;align-items:flex-start;gap:12px">' +
+          '<div style="width:38px;height:38px;border-radius:50%;background:rgba(243,146,0,0.12);color:var(--or);display:grid;place-items:center;font-size:18px;flex:none;margin-top:2px">🔒</div>' +
+          '<div style="flex:1">' +
+            '<b style="font-size:15px;color:var(--ink);display:block">ব্র্যান্ড প্রোফাইল লক করা আছে</b>' +
+            '<span style="font-size:13px;color:var(--mut);line-height:1.5;display:block;margin-top:3px">আপনার ব্র্যান্ডের নিরাপত্তা ও পলিসির স্বার্থে একবার সেটআপের পর তথ্য লক থাকে। কোনো তথ্য পরিবর্তন বা নতুন লোগো দিতে চাইলে অ্যাডমিনের সাথে যোগাযোগ করুন।</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:4px">' +
+          '<a class="btn sm" href="' + esc(wa(waText)) + '" target="_blank" rel="noopener" style="background:#25D366;color:#fff;border:0;display:inline-flex;align-items:center;gap:8px;padding:0 18px;height:42px;font-size:14px;border-radius:8px">' + I.wa + ' অ্যাডমিনের সাথে যোগাযোগ করুন ↗</a>' +
+          '<a class="btn sm sec" onclick="go(\'home\')" style="height:42px;padding:0 18px;font-size:14px;border-radius:8px">ডিজাইনে ফিরে যান</a>' +
+        '</div>' +
+      '</div>';
+
+  return wtop((T('tec0a11b4', 'ব্র্যান্ড সেটআপ'))) + '<div class="wmain">' + lback((T('tb2052257', 'ফিরে যান'))) + head((T('t18968120', 'আপনার *ব্র্যান্ড* সেটআপ', 'span')), (isLocked ? 'নিরাপত্তার স্বার্থে ব্র্যান্ড তথ্য লক করা আছে। পরিবর্তনের জন্য অ্যাডমিনের সাথে যোগাযোগ করুন।' : T('td0c3b535', 'শুধু একবার। এরপর প্রতিটা কমান্ডে এগুলো নিজে থেকেই বসে যাবে।'))) +
+    '<div class="setgrid" style="margin-top:22px"><div class="card"><h3>' + T('tcc9293bb', 'লোগো') + '</h3><div style="height:12px"></div>' + logoBoxHtml +
+    '<div class="fl"><label><span>' + T('t79ee0900', 'লোগোর আকার') + '</span></label><div class="shapes">' +
+    SH.map(function (x) { return '<div class="shp' + (s.shape === x[0] ? ' on' : '') + '" ' + (isLocked ? 'style="cursor:not-allowed;opacity:0.8"' : 'onclick="setShape(\'' + x[0] + '\')"') + '><i style="' + x[2] + '"></i>' + x[1] + '</div>'; }).join('') + '</div></div>' +
+    '<div class="fl"><label><span>' + T('t97b81d98', 'ব্র্যান্ডের রং') + '</span>' + (s.colors.length ? ('<small>' + T('tef9bf36a', 'লোগো থেকে') + '</small>') : '') + '</label>' + cols + '</div></div>' +
+    '<div class="card"><h3>' + T('t149ae164', 'ব্র্যান্ডের তথ্য') + '</h3>' +
+    '<div class="fl"><label><span>' + T('t580a7bdc', 'ব্র্যান্ডের নাম') + '</span><small>' + (isLocked ? '🔒 লকড' : T('td6835426', 'পরে বদলানো যাবে না')) + '</small></label><input class="in" id="sname" value="' + esc(s.name) + '" ' + (isLocked ? 'disabled style="cursor:not-allowed;background:var(--card2)"' : '') + ' oninput="S.setup.name=this.value" placeholder="' + T('tb64ace7b', 'যেমন: পল্লী বাজার') + '"></div>' +
+    '<div class="fl"><label><span>' + T('t95505337', 'ট্যাগলাইন') + '<em>' + T('t34544152', 'ঐচ্ছিক') + '</em></span></label><input class="in" id="stag" value="' + esc(s.tag) + '" ' + (isLocked ? 'disabled style="cursor:not-allowed;background:var(--card2)"' : 'oninput="S.setup.tag=this.value"') + ' placeholder="' + T('t238cd1bb', 'যেমন: খাঁটি গাওয়া ঘি আর অর্গানিক খাবার') + '"></div>' +
+    '<div class="fl"><label><span>' + T('td62d06b4', 'ব্যবসার ধরন') + '</span></label><div class="sel"><select class="in" id="sbiz" ' + (isLocked ? 'disabled style="cursor:not-allowed;background:var(--card2)"' : 'onchange="S.setup.biz=this.value"') + '><option value="">' + T('t00685af0', 'বেছে নিন') + '</option>' +
+    biz.map(function (b) { return '<option' + (b === s.biz ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select></div></div>' +
+    ctaHtml + '</div></div></div>';
 };
 function setShape(x) { setupState().shape = x; rerender(); }
 function setColor(i, v) { setupState().colors[i] = v.toUpperCase(); var d = document.querySelectorAll('.cols div')[i]; if (d) { d.querySelector('span').style.background = v; d.querySelector('em').textContent = v.toUpperCase(); } }
 function pickLogo(inp) { var f = inp.files[0]; if (f) readLogo(f); }
 function readLogo(file) {
-  var rd = new FileReader();
-  rd.onload = function () {
-    var im = new Image();
-    im.onload = function () {
-      var max = 120, sc = Math.min(1, max / Math.max(im.width, im.height));
-      var w = Math.max(1, Math.round(im.width * sc)), h = Math.max(1, Math.round(im.height * sc));
-      var cv = document.createElement('canvas'); cv.width = w; cv.height = h; var x = cv.getContext('2d'); x.drawImage(im, 0, 0, w, h);
-      var d = x.getImageData(0, 0, w, h).data, tot = 0, cnt0 = {}, minX = w, minY = h, maxX = 0, maxY = 0;
-      for (var y = 0; y < h; y++) for (var i = 0; i < w; i++) {
-        var o = (y * w + i) * 4, r = d[o], g = d[o + 1], b = d[o + 2], a = d[o + 3];
-        if (a < 128 || (r > 238 && g > 238 && b > 238)) continue; tot++;
-        if (i < minX) minX = i; if (i > maxX) maxX = i; if (y < minY) minY = y; if (y > maxY) maxY = y;
-        if (a < 230) continue; var key = (r >> 5) + ',' + (g >> 5) + ',' + (b >> 5); var c0 = cnt0[key] || (cnt0[key] = [0, 0, 0, 0]); c0[0]++; c0[1] += r; c0[2] += g; c0[3] += b;
+  if (!file) return;
+  var objUrl = (window.URL && window.URL.createObjectURL) ? URL.createObjectURL(file) : null;
+  var im = new Image();
+  im.onload = function () {
+    if (objUrl) { try { URL.revokeObjectURL(objUrl); } catch (e) {} }
+    var max = 120, sc = Math.min(1, max / Math.max(im.width, im.height));
+    var w = Math.max(1, Math.round(im.width * sc)), h = Math.max(1, Math.round(im.height * sc));
+    var cv = document.createElement('canvas'); cv.width = w; cv.height = h; var x = cv.getContext('2d'); x.drawImage(im, 0, 0, w, h);
+    var d = x.getImageData(0, 0, w, h).data, tot = 0, cnt0 = {}, minX = w, minY = h, maxX = 0, maxY = 0, hasAlpha = false;
+    for (var y = 0; y < h; y++) for (var i = 0; i < w; i++) {
+      var o = (y * w + i) * 4, r = d[o], g = d[o + 1], b = d[o + 2], a = d[o + 3];
+      if (a < 240) hasAlpha = true;
+      if (a < 128 || (r > 238 && g > 238 && b > 238)) continue; tot++;
+      if (i < minX) minX = i; if (i > maxX) maxX = i; if (y < minY) minY = y; if (y > maxY) maxY = y;
+      if (a < 230) continue; var key = (r >> 5) + ',' + (g >> 5) + ',' + (b >> 5); var c0 = cnt0[key] || (cnt0[key] = [0, 0, 0, 0]); c0[0]++; c0[1] += r; c0[2] += g; c0[3] += b;
+    }
+    var keys = Object.keys(cnt0).sort(function (a, b) { return cnt0[b][0] - cnt0[a][0]; }), picked = [];
+    keys.forEach(function (k) {
+      var c0 = cnt0[k]; if (picked.length >= 3 || c0[0] < tot * 0.03) return;
+      var p = [Math.round(c0[1] / c0[0]), Math.round(c0[2] / c0[0]), Math.round(c0[3] / c0[0])];
+      if (picked.every(function (q) { return Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) + Math.abs(q[2] - p[2]) > 150; })) picked.push(p);
+    });
+    var hex = function (p) { return '#' + p.map(function (n) { return ('0' + Math.min(255, n).toString(16)).slice(-2); }).join('').toUpperCase(); };
+    var s = setupState(); s.colors = picked.map(hex); ['#FFFFFF', '#1D1D21', '#F39200'].forEach(function (f) { if (s.colors.length < 3 && s.colors.indexOf(f) < 0) s.colors.push(f); });
+    var bw = Math.max(1, maxX - minX + 1), bh = Math.max(1, maxY - minY + 1), ratio = bw / bh;
+    s.shape = ratio > 1.6 ? 'wide' : ratio < 0.75 ? 'tall' : 'square';
+
+    // লোগো অপ্টিমাইজড কম্প্রেশন (~২০০ পিক্সেল max, ২০-৩০ KB)
+    var maxDim = 200, ts = Math.min(1, maxDim / Math.max(im.width, im.height));
+    var tw = Math.max(1, Math.round(im.width * ts)), th = Math.max(1, Math.round(im.height * ts));
+    var t = document.createElement('canvas'); t.width = tw; t.height = th;
+    var tctx = t.getContext('2d');
+    tctx.imageSmoothingEnabled = true;
+    tctx.imageSmoothingQuality = 'high';
+    tctx.drawImage(im, 0, 0, tw, th);
+
+    var compressed = '';
+    try {
+      compressed = t.toDataURL('image/webp', 0.82);
+    } catch (e) {}
+    if (!compressed || !compressed.startsWith('data:image/webp')) {
+      if (!hasAlpha) {
+        compressed = t.toDataURL('image/jpeg', 0.82);
+      } else {
+        compressed = t.toDataURL('image/png');
       }
-      var keys = Object.keys(cnt0).sort(function (a, b) { return cnt0[b][0] - cnt0[a][0]; }), picked = [];
-      keys.forEach(function (k) {
-        var c0 = cnt0[k]; if (picked.length >= 3 || c0[0] < tot * 0.03) return;
-        var p = [Math.round(c0[1] / c0[0]), Math.round(c0[2] / c0[0]), Math.round(c0[3] / c0[0])];
-        if (picked.every(function (q) { return Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) + Math.abs(q[2] - p[2]) > 150; })) picked.push(p);
-      });
-      var hex = function (p) { return '#' + p.map(function (n) { return ('0' + Math.min(255, n).toString(16)).slice(-2); }).join('').toUpperCase(); };
-      var s = setupState(); s.colors = picked.map(hex); ['#FFFFFF', '#1D1D21', '#F39200'].forEach(function (f) { if (s.colors.length < 3 && s.colors.indexOf(f) < 0) s.colors.push(f); });
-      var bw = Math.max(1, maxX - minX + 1), bh = Math.max(1, maxY - minY + 1), ratio = bw / bh;
-      s.shape = ratio > 1.6 ? 'wide' : ratio < 0.75 ? 'tall' : 'square';
-      var t = document.createElement('canvas'), ts = Math.min(1, 160 / Math.max(im.width, im.height)); t.width = Math.round(im.width * ts); t.height = Math.round(im.height * ts); t.getContext('2d').drawImage(im, 0, 0, t.width, t.height);
-      s.logo = t.toDataURL('image/png');
-      rerender();
-    };
-    im.src = rd.result;
+    }
+    // Safety check: ২০-৩০ KB এর মধ্যে নিশ্চিত রাখতে প্রয়োজনে আরেকটু স্কেল ডাউন
+    if (compressed.length > 40000) {
+      try {
+        var t2 = document.createElement('canvas');
+        var sc2 = Math.min(1, 140 / Math.max(tw, th));
+        t2.width = Math.max(1, Math.round(tw * sc2));
+        t2.height = Math.max(1, Math.round(th * sc2));
+        var tctx2 = t2.getContext('2d');
+        tctx2.imageSmoothingEnabled = true;
+        tctx2.imageSmoothingQuality = 'high';
+        tctx2.drawImage(t, 0, 0, t2.width, t2.height);
+        var c2 = t2.toDataURL('image/webp', 0.75);
+        if (c2 && c2.startsWith('data:image/webp')) compressed = c2;
+        else if (!hasAlpha) compressed = t2.toDataURL('image/jpeg', 0.75);
+        else compressed = t2.toDataURL('image/png');
+      } catch (e) {}
+    }
+    s.logo = compressed;
+    rerender();
   };
-  rd.readAsDataURL(file);
+  im.onerror = function () {
+    if (objUrl) { try { URL.revokeObjectURL(objUrl); } catch (e) {} }
+    toast((T('t76422b4a', 'লোগোর ছবি লোড করা যায়নি, অন্য ছবি দিন')), 1);
+  };
+  if (objUrl) {
+    im.src = objUrl;
+  } else {
+    var rd = new FileReader();
+    rd.onload = function () { im.src = rd.result; };
+    rd.readAsDataURL(file);
+  }
 }
 function doSetup() {
   var s = setupState(), m = M();
-  var n = (m.brand || $('sname').value).trim(); s.tag = $('stag').value.trim(); s.biz = $('sbiz').value;
+  var isUnlocked = !!(m.brand_unlocked || (m.note && m.note.indexOf('[UNLOCKED]') > -1));
+  if (m.brand && !isUnlocked) {
+    return toast('ব্র্যান্ড তথ্য লক করা আছে। পরিবর্তনের জন্য অ্যাডমিনের সাথে যোগাযোগ করুন।', 1);
+  }
+  var n = (m.brand && !isUnlocked ? m.brand : ($('sname') ? $('sname').value : '')).trim();
+  s.tag = $('stag') ? $('stag').value.trim() : '';
+  s.biz = $('sbiz') ? $('sbiz').value : '';
   if (!n) return toast((T('t7adc25a0', 'ব্র্যান্ডের নাম দিন')), 1);
   if (!s.biz) return toast((T('tfa9b9ec1', 'ব্যবসার ধরন বেছে নিন')), 1);
   if (!s.colors.length) return toast((T('t460c9379', 'লোগোর ছবি দিন')), 1);
@@ -760,6 +842,10 @@ function doSetup() {
   api('brand', { phone: S.phone, brand: n, tagline: s.tag, biz: s.biz, c1: s.colors[0], c2: s.colors[1], c3: s.colors[2], shape: s.shape, logo: s.logo || '' }).then(function (r) {
     busy(0); if (!r.ok) return toast(r.err, 1);
     var first = !m.brand; if (s.logo) LS.set('eds_logo', s.logo); setMember(r.member); S.setup = null;
+    if (isUnlocked) {
+      rpc('admin_toggle_brand_unlock', { p_phone: S.phone, p_unlocked: false }).catch(function () {});
+      if (S.member) S.member.brand_unlocked = false;
+    }
     go('home'); if (first) firstTime(); else toast((T('t2fdc2806', 'ব্র্যান্ড সেভ হয়েছে ✓')));
   }).catch(function (e) { busy(0); toast(errMsg(e), 1); });
 }
@@ -794,7 +880,8 @@ V.acct = function () {
   if (!S.phone) return topm() + '<div class="main">' + head((T('tfaa77e7f', 'অ্যাকাউন্ট')), (T('td8f488d7', 'লগইন করলে এখানে আপনার ব্র্যান্ড, মেম্বারশিপ আর পেমেন্ট দেখা যাবে।'))) + ('<div style="max-width:420px;margin-top:22px"><a class="btn" data-go="login">' + T('t704040d2', 'লগইন করুন')) + I.arr + '</a></div>' +
     (P.length ? ('<div class="card" style="max-width:420px;margin-top:20px"><h3>' + T('t05e84ffe', 'পলিসি') + '</h3><div class="links" style="margin-top:4px">') + P.map(function (p) { return '<a onclick="openPolicy(\'' + esc(p.key) + '\')">' + esc(p.title) + '</a>'; }).join('') + '</div></div>' : '') + '</div>' + tabs2('acct');
   var st = m.paid ? ('<b class="ok" style="font-weight:400">' + T('tb90a540c', 'চালু') + '</b>') : m.expired ? ('<b style="font-weight:400;color:#F0606A">' + T('t91e4d553', 'মেয়াদ শেষ') + '</b>') : '<b style="font-weight:400;color:var(--or)">' + (S.payPending ? (T('t56a5f99c', 'পেমেন্ট যাচাই হচ্ছে')) : (T('te23c569d', 'নেওয়া হয়নি'))) + '</b>';
-  var brand = m.brand ? ('<div class="card"><h3>' + T('tc471512c', 'ব্র্যান্ড') + ' ') + (m.paid ? ('<a data-go="setup">' + T('t15ec6584', 'এডিট') + '</a>') : '') + '</h3><div style="display:flex;gap:12px;align-items:center;margin:14px 0 4px">' + logoBox().replace('class="blogo"', 'class="blogo" style="width:52px;height:52px"') + '<div><div style="font-size:17px;font-weight:700">' + esc(m.brand) + '</div><div style="font-size:13.5px;color:var(--mut)">' + esc(m.biz || '') + ' · ' + esc(S.phone) + '</div></div></div><div class="sw" style="margin-top:12px">' + [m.c1, m.c2, m.c3].map(function (c) { return '<div><span style="background:' + esc(c || '#2F2F37') + ';height:22px"></span></div>'; }).join('') + '</div></div>'
+  var isUnlocked = !!(m.brand_unlocked || (m.note && m.note.indexOf('[UNLOCKED]') > -1));
+  var brand = m.brand ? ('<div class="card"><h3>' + T('tc471512c', 'ব্র্যান্ড') + ' ') + (m.paid ? ('<a data-go="setup">' + (isUnlocked ? 'এডিট করুন 🔓' : 'দেখুন 🔒') + '</a>') : '') + '</h3><div style="display:flex;gap:12px;align-items:center;margin:14px 0 4px">' + logoBox().replace('class="blogo"', 'class="blogo" style="width:52px;height:52px"') + '<div><div style="font-size:17px;font-weight:700">' + esc(m.brand) + '</div><div style="font-size:13.5px;color:var(--mut)">' + esc(m.biz || '') + ' · ' + esc(S.phone) + '</div></div></div><div class="sw" style="margin-top:12px">' + [m.c1, m.c2, m.c3].map(function (c) { return '<div><span style="background:' + esc(c || '#2F2F37') + ';height:22px"></span></div>'; }).join('') + '</div></div>'
     : ('<div class="card"><h3>' + T('tc471512c', 'ব্র্যান্ড') + '</h3><p style="color:var(--mut);font-size:14px;margin-top:8px">' + T('t30850dcc', 'মেম্বারশিপ চালু হলে ব্র্যান্ড সেটআপ করবেন।') + '</p><div style="font-size:14px;color:var(--ink2);margin-top:8px">') + esc(S.phone) + '</div></div>';
   var mem = ('<div class="card"><h3>' + T('tea80659b', 'মেম্বারশিপ') + '</h3><div class="kv" style="margin-top:8px"><div><span>' + T('tc9dfad7d', 'অবস্থা') + '</span>') + st + '</div>' + (m.expiry ? ('<div><span>' + T('t0b41b6d2', 'মেয়াদ') + '</span>') + fmtDate(m.expiry) + '</div>' : '') + (m.paid ? ('<div><span>' + T('t9e6f5013', 'বাকি') + '</span>') + BN(m.daysLeft) + (' ' + T('t79af515e', 'দিন') + '</div>') : '') + '</div>' +
     (m.paid ? ('<a class="btn sec" data-go="member" style="height:46px;font-size:15px;margin-top:16px">' + T('td42fb54e', 'মেয়াদ বাড়ান') + '</a>') : '<a class="btn" data-go="member" style="height:46px;font-size:15px;margin-top:16px">' + (S.payPending ? (T('tf3cd0bbd', 'পেমেন্টের অবস্থা দেখুন')) : (T('t925d8832', 'মেম্বারশিপ নিন · ৳')) + BN(price()) + (T('t95c37f70', '/বছর'))) + '</a>') + '</div>';
@@ -981,6 +1068,14 @@ function boot() {
   }).catch(function (e) { if (!S.c) go('off'); else toast(errMsg(e), 1); });
   if (S.phone) api('me', { phone: S.phone }).then(function (r) {
     if (!r.ok) return; if (r.member) setMember(r.member); S.payPending = !!r.pending;
+    rpc('check_member_auth', { p_phone: S.phone }).then(function (auth) {
+      if (auth && S.member) {
+        if (auth.brand_unlocked != null) S.member.brand_unlocked = !!auth.brand_unlocked;
+        if (auth.verified != null) S.member.verified = !!auth.verified;
+        LS.set('eds_m', S.member);
+      }
+      if (S.c && ['home', 'style', 'acct', 'member', 'guide', 'setup'].indexOf(CUR) > -1) rerender();
+    }).catch(function () {});
     if (S.c && ['home', 'style', 'acct', 'member', 'guide'].indexOf(CUR) > -1) rerender();
     if (back) { if (r.member && r.member.paid) go('paid'); else if (backFail) { go('member'); toast((T('t5c67b0ef', 'পেমেন্ট হয়নি, টাকা কাটা হয়নি। আবার চেষ্টা করতে পারেন।')), 1); } else go('wait'); return; }
     if (r.member && r.member.paid && !r.member.brand && S.c && ['home', 'member'].indexOf(CUR) > -1) go('setup');

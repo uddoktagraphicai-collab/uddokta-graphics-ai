@@ -99,12 +99,18 @@ var I = {
   plus: ic('<path d="M12 5v14M5 12h14"/>', 2.2), back: ic('<path d="M15 5l-7 7 7 7"/>', 2.2), x: ic('<path d="M6 6l12 12M18 6 6 18"/>', 2.2),
   up: ic('<path d="M6 15l6-6 6 6"/>', 2.2), down: ic('<path d="M6 9l6 6 6-6"/>', 2.2), eye: ic('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'), eyeOff: ic('<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'),
   cld: ic('<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>'), sms: ic('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
-  upl: ic('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'), ai: ic('<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'),
+  upl: ic('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'),
+  img: ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>'),
+  ai: ic('<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'),
   link: ic('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
   edit: ic('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>'),
   chk: ic('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 2.4), search: ic('<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>'), copy: ic('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>'),
   menu: ic('<path d="M4 7h16M4 12h16M4 17h16"/>', 2),
-  globe: ic('<circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/>')
+  globe: ic('<circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/>'),
+  wa: ic('<path d="M17.47 14.38c-.3-.15-1.78-.88-2.06-.98-.27-.1-.47-.15-.67.15-.2.3-.78.98-.95 1.18-.18.2-.35.23-.65.08-.3-.15-1.27-.47-2.42-1.49-.9-.8-1.5-1.78-1.68-2.08-.17-.3-.02-.46.13-.61.14-.13.3-.35.45-.53.15-.17.2-.3.3-.5.1-.2.05-.38-.02-.53-.08-.15-.68-1.63-.93-2.23-.24-.58-.49-.5-.67-.51-.18-.01-.38-.01-.58-.01s-.52.08-.8.38c-.27.3-1.05 1.02-1.05 2.5 0 1.48 1.08 2.91 1.23 3.11.15.2 2.11 3.23 5.12 4.53.72.31 1.28.5 1.71.63.72.23 1.37.2 1.89.12.58-.09 1.78-.73 2.03-1.43.25-.7.25-1.3.18-1.43-.08-.12-.28-.2-.58-.35z"/><path d="M12 2a10 10 0 0 0-8.58 15.13L2 22l4.99-1.31A10 10 0 1 0 12 2z"/>'),
+  alert: ic('<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'),
+  dl: ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+  pdf: ic('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>')
 };
 
 // --- ৩. সেন্ট্রাল API ক্লায়েন্ট (Supabase) ও সেশন ---
@@ -219,9 +225,59 @@ function kv(t) { var o = {}; (A.data[t] || []).forEach(function (r) { o[r.key] =
 // --- ৪. মডাল ও কনফার্ম ডায়ালগ ---
 function modal(h, wide) { $('mbox').innerHTML = h; $('mbox').className = 'mbox' + (wide ? ' wide' : ''); $('mov').hidden = false; var f = $('mbox').querySelector('input,textarea'); if (f) setTimeout(function () { f.focus(); }, 50); }
 function closeModal() { $('mov').hidden = true; $('mbox').innerHTML = ''; }
-function confirmBox(title, text, yesTxt, fn, danger) {
+function confirmBox(title, text, yesTxt, fn, danger, typeMatch) {
+  if (typeMatch) return typeConfirmBox(title, text, typeMatch, yesTxt, fn, danger);
   modal('<h3>' + title + '</h3><p>' + text + '</p><div class="macts"><a class="btn sm sec" onclick="closeModal()">বাতিল</a><a class="btn sm' + (danger ? ' red' : '') + '" id="myes">' + yesTxt + '</a></div>');
   $('myes').onclick = function () { closeModal(); fn(); };
+}
+function typeConfirmBox(title, text, targetPhrase, yesTxt, fn, danger) {
+  var target = String(targetPhrase || 'DELETE').trim();
+  var html = '<h3>' + title + '</h3>' +
+    '<p style="color:var(--mut);font-size:13.5px;line-height:1.55;margin:8px 0 14px">' + text + '</p>' +
+    '<div class="vconf-box">' +
+      '<label class="vconf-label">নিশ্চিত করতে নিচে হুবহু <b class="vconf-target">' + esc(target) + '</b> লিখুন:</label>' +
+      '<input class="in vconf-in" id="vconf_in" placeholder="' + esc(target) + '" autocomplete="off" spellcheck="false">' +
+    '</div>' +
+    '<div class="macts" style="margin-top:18px">' +
+      '<a class="btn sm sec" onclick="closeModal()">বাতিল</a>' +
+      '<button type="button" class="btn sm' + (danger ? ' red' : '') + '" id="myes" disabled style="opacity:0.35;cursor:not-allowed;pointer-events:none">' + yesTxt + '</button>' +
+    '</div>';
+  modal(html);
+  var inp = $('vconf_in');
+  var btn = $('myes');
+  if (!inp || !btn) return;
+  function checkMatch() {
+    var val = (inp.value || '').trim();
+    var isMatch = (val.toLowerCase() === target.toLowerCase()) || (val.toUpperCase() === 'DELETE');
+    if (isMatch) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+      btn.style.pointerEvents = 'auto';
+    } else {
+      btn.disabled = true;
+      btn.style.opacity = '0.35';
+      btn.style.cursor = 'not-allowed';
+      btn.style.pointerEvents = 'none';
+    }
+  }
+  inp.oninput = checkMatch;
+  inp.onkeydown = function (e) {
+    if (e.key === 'Enter') {
+      var val = (inp.value || '').trim();
+      var isMatch = (val.toLowerCase() === target.toLowerCase()) || (val.toUpperCase() === 'DELETE');
+      if (isMatch && !btn.disabled) {
+        e.preventDefault();
+        closeModal();
+        fn();
+      }
+    }
+  };
+  btn.onclick = function () {
+    if (btn.disabled) return;
+    closeModal();
+    fn();
+  };
 }
 
 // --- ৫. সাইডবার নেভিগেশন ও রাউটার ---
@@ -382,22 +438,288 @@ function logout() {
 }
 
 // --- ৭. ড্যাশবোর্ড মেট্রিক্স ও অ্যানালিটিক্স ---
+function waReminderUrl(ph, brand, days) {
+  var p = (ph || '').replace(/\D/g, '');
+  if (p.length === 11 && p.startsWith('01')) p = '88' + p;
+  else if (p.length === 10 && p.startsWith('1')) p = '880' + p;
+  var bName = brand ? (' (' + brand + ')') : '';
+  var daysTxt = (days <= 0) ? 'আজই শেষ হচ্ছে' : (BN(days) + ' দিন বাকি');
+  var msg = 'আসসালামু আলাইকুম। উদ্যোক্তা গ্রাফিক্স AI থেকে জানাচ্ছি—\nআপনার মেম্বারশিপ' + bName + '-এর মেয়াদ ' + daysTxt + '।\n\nপ্রতিদিনের সকল ডিজাইন ও কমান্ড সচল রাখতে অনুগ্রহ করে মেম্বারশিপ রিনিউ করে নিন। যেকোনো সহায়তায় আমাদের মেসেজ দিতে পারেন। ধন্যবাদ!';
+  return 'https://wa.me/' + p + '?text=' + encodeURIComponent(msg);
+}
+
 P.dash = function () {
-  return api('a_dash').then(function (d) {
-    if (!d.ok) throw new Error(d.err); A.pending = d.pending;
+  return Promise.all([
+    api('a_dash'),
+    rpc('get_admin_dashboard_stats').catch(function () { return { today_rev: 0, today_sales: 0, today_new_members: 0, expiring_members: [] }; }),
+    load(['settings']).catch(function () {})
+  ]).then(function (rs) {
+    var d = rs[0];
+    if (!d.ok) throw new Error(d.err);
+    A.pending = d.pending;
+    var stats = rs[1] || {};
+    var todayRev = Number(stats.today_rev) || 0;
+    var todaySales = Number(stats.today_sales) || 0;
+    var todayNewMem = Number(stats.today_new_members) || 0;
+    var expiring = stats.expiring_members || [];
+
+    var epsCfg = A.eps || {};
+    var smsCfg = A.sms || {};
+    var cldCfg = A.cloudinary || {};
+    var sett = kv('settings');
+
+    // ১. কুইক অ্যাকশন টুলবার
+    var waHelpNum = (sett.whatsapp || '').replace(/\D/g, '');
+    var waChatUrl = waHelpNum ? ('https://wa.me/' + (waHelpNum.startsWith('0') ? '88' + waHelpNum : waHelpNum)) : 'https://web.whatsapp.com';
+
+    var quickBar = '<div class="dash-quick-bar">' +
+      '<a class="dash-qbtn primary" onclick="addMember()">' + I.plus + '<span>মেম্বার যোগ</span></a>' +
+      '<a class="dash-qbtn" data-go="style" data-arg="new">' + I.grid + '<span>নতুন স্টাইল</span></a>' +
+      '<a class="dash-qbtn" data-go="payments">' + I.pay + '<span>পেমেন্ট চেক' + (d.pending ? ' (' + BN(d.pending) + ')' : '') + '</span></a>' +
+      '<a class="dash-qbtn wa" href="' + esc(waChatUrl) + '" target="_blank" rel="noopener">' + I.wa + '<span>WhatsApp চ্যাট</span></a>' +
+      '</div>';
+
+    // ২. গেটওয়ে ও সিস্টেম সংযোগ হেলথ স্ট্রিপ
+    var epsStatusHtml = epsCfg.ready ?
+      '<span class="gw-dot ok"></span><span><strong>EPS গেটওয়ে:</strong> সক্রিয় (' + (epsCfg.mode === 'live' ? 'লাইভ' : 'স্যান্ডবক্স') + ')</span>' :
+      '<span class="gw-dot warn"></span><span><strong>EPS গেটওয়ে:</strong> সেটআপ প্রয়োজন</span>';
+
+    var smsStatusHtml = smsCfg.ready ?
+      '<span class="gw-dot ok"></span><span><strong>BulkSMSBD OTP:</strong> সক্রিয়' + (smsCfg.senderId ? ' (' + esc(smsCfg.senderId) + ')' : '') + '</span>' :
+      '<span class="gw-dot warn"></span><span><strong>BulkSMSBD OTP:</strong> টোকেন নেই</span>';
+
+    var cldStatusHtml = cldCfg.ready ?
+      '<span class="gw-dot ok"></span><span><strong>Cloudinary:</strong> সংযুক্ত</span>' :
+      '<span class="gw-dot warn"></span><span><strong>Cloudinary:</strong> সেটআপ প্রয়োজন</span>';
+
+    var gwStrip = '<div class="gw-strip">' +
+      '<div class="gw-item">' + epsStatusHtml + '</div>' +
+      '<div class="gw-sep"></div>' +
+      '<div class="gw-item">' + smsStatusHtml + '</div>' +
+      '<div class="gw-sep"></div>' +
+      '<div class="gw-item">' + cldStatusHtml + '</div>' +
+      '<div class="gw-sep"></div>' +
+      '<div class="gw-item"><span class="gw-dot ok"></span><span><strong>Supabase:</strong> ক্লাউড অনলাইন</span></div>' +
+      '</div>';
+
     var max = Math.max.apply(null, d.top.map(function (x) { return x.used; }).concat([1]));
-    var kpi = function (l, v, e, cls, go) { return '<div class="kpi"' + (go ? ' data-go="' + go + '" style="cursor:pointer"' : '') + '><small>' + l + '</small><b' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</b><em class="n">' + e + '</em></div>'; };
-    return ah('ড্যাশবোর্ড', 'আজকের অবস্থা এক নজরে') +
-      (d.pending ? '<div class="lock" data-go="payments" style="cursor:pointer;margin-bottom:16px">' + I.pay + '<div style="flex:1"><b style="color:var(--ink)">' + BN(d.pending) + 'টা পেমেন্ট যাচাইয়ের অপেক্ষায়</b> · TrxID মিলিয়ে অ্যাপ্রুভ করুন</div><span class="ghost">দেখুন</span></div>' : '') +
-      '<div class="kpis">' + kpi('মোট মেম্বার', BN(d.members), 'গত ৭ দিনে নতুন ' + BN(d.newWeek) + ' জন', '', 'members') + kpi('চালু মেম্বারশিপ', BN(d.paid), '১৫ দিনের মধ্যে শেষ হবে ' + BN(d.soon) + 'টা', 'okc', 'members') +
-      kpi('এই মাসের আয়', '৳' + BN(d.revMonth.toLocaleString('en-IN')), 'মোট আয় ৳' + BN(d.revTotal.toLocaleString('en-IN'))) + kpi('মোট কাস্টমাইজড কমান্ড', BN(d.made), 'সব মেম্বার মিলে') + '</div>' +
-      '<div class="g2"><div class="pn"><h3>সাম্প্রতিক পেমেন্ট <a data-go="payments">সব দেখুন</a></h3>' + (d.recent.length ? '<table class="tbl"><tbody>' + d.recent.map(function (p) { return '<tr><td><div class="th"><div><b>' + esc(p.brand || p.phone) + '</b><small>' + esc(p.phone) + ' · ' + esc(p.method) + '</small></div></div></td><td>' + dt(p.time) + '</td><td>৳' + BN(p.amount) + '</td><td>' + payst(p.status) + '</td></tr>'; }).join('') + '</tbody></table>' : '<div class="empty">এখনো কোনো পেমেন্ট নেই</div>') + '</div>' +
-      '<div class="pn"><h3>সবচেয়ে বেশি ব্যবহার হওয়া স্টাইল <a data-go="styles">সব স্টাইল</a></h3><div class="hbars">' + (d.top.length ? d.top.map(function (s) { return '<div><span>' + esc(s.name) + '</span><i><b style="width:' + Math.max(2, Math.round(s.used / max * 100)) + '%"></b></i><em>' + BN(s.used) + '</em></div>'; }).join('') : '<div class="empty">এখনো কোনো ডেটা নেই</div>') + '</div></div></div>';
+    var kpi = function (l, v, e, cls, go) {
+      return '<div class="kpi"' + (go ? ' data-go="' + go + '" style="cursor:pointer"' : '') + '><small>' + l + '</small><b' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</b><em class="n">' + e + '</em></div>';
+    };
+
+    // ৩. মূল ড্যাশবোর্ড ৪টি কেপিআই কার্ড (আজকের আয়, চলতি মাসের আয়, মেম্বারশিপ, ডিজাইন কমান্ড)
+    var kpisHtml = '<div class="kpis">' +
+      kpi('আজকের আয়', '৳' + BN(todayRev.toLocaleString('en-IN')), 'আজকের সেলস ' + BN(todaySales) + 'টা · নতুন ' + BN(todayNewMem) + ' জন', 'orc', 'payments') +
+      kpi('এই মাসের আয়', '৳' + BN(d.revMonth.toLocaleString('en-IN')), 'সর্বমোট আয় ৳' + BN(d.revTotal.toLocaleString('en-IN')), '', 'payments') +
+      kpi('চালু মেম্বারশিপ', BN(d.paid), (d.soon ? '১৫ দিনের মধ্যে শেষ হবে ' + BN(d.soon) + 'টা' : 'সব মেম্বার অ্যাক্টিভ'), 'okc', 'members') +
+      kpi('মোট ডিজাইন কমান্ড', BN(d.made), 'মোট মেম্বার ' + BN(d.members) + ' জন', '', 'members') +
+      '</div>';
+
+    // ৪. মেয়াদ শেষের পথে রিনিউয়াল ফলো-আপ টেবিল
+    var expHtml = '';
+    if (expiring.length > 0) {
+      expHtml = '<div class="exp-box">' +
+        '<h3>' + I.alert + '<span>মেয়াদ শেষের পথে মেম্বার (রিনিউয়াল ফলো-আপ)</span><span class="badge warn">' + BN(expiring.length) + ' জন</span></h3>' +
+        '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>মেম্বার ও ব্র্যান্ড</th><th>ব্যবসার ধরন</th><th>মেয়াদ শেষ</th><th class="r">বাকি দিন</th><th class="r">অ্যাকশন</th></tr></thead><tbody>' +
+        expiring.map(function (m) {
+          var remUrl = waReminderUrl(m.phone, m.brand, m.days_left);
+          var dlTxt = m.days_left <= 0 ? '<b style="color:var(--err)">আজই শেষ</b>' : ('<b style="color:#f59e0b">' + BN(m.days_left) + ' দিন</b>');
+          return '<tr>' +
+            '<td><div class="th"><div><b>' + esc(m.brand || m.phone) + '</b><small>' + esc(m.phone) + '</small></div></div></td>' +
+            '<td>' + esc(m.biz || 'সাধারণ') + '</td>' +
+            '<td>' + dt(m.expiry) + '</td>' +
+            '<td class="r">' + dlTxt + '</td>' +
+            '<td class="r"><div style="display:inline-flex;gap:8px;align-items:center">' +
+            '<a class="btn sm wa-btn" href="' + remUrl + '" target="_blank" rel="noopener">' + I.wa + ' হোয়াটসঅ্যাপ রিমাইন্ডার</a>' +
+            '<a class="ghost sm" data-go="member" data-arg="' + esc(m.phone) + '">প্রোফাইল</a>' +
+            '</div></td>' +
+            '</tr>';
+        }).join('') +
+        '</tbody></table></div></div>';
+    }
+
+    // ৫. সাম্প্রতিক পেমেন্ট (ইনলাইন EPS যাচাই সহ)
+    var recentPaymentsHtml = '<div class="pn"><h3>সাম্প্রতিক পেমেন্ট <a data-go="payments">সব দেখুন</a></h3>' +
+      (d.recent.length ? '<table class="tbl"><tbody>' + d.recent.map(function (p) {
+        var inlineBtn = (p.status === 'অপেক্ষায়') ?
+          ' <a class="btn sm sec inline-pay-btn" onclick="payCheck(\'' + esc(p.id) + '\')">EPS যাচাই</a>' : '';
+        return '<tr><td><div class="th"><div><b>' + esc(p.brand || p.phone) + '</b><small>' + esc(p.phone) + ' · ' + esc(p.method) + '</small></div></div></td><td>' + dt(p.time) + '</td><td>৳' + BN(p.amount) + '</td><td>' + payst(p.status) + inlineBtn + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<div class="empty">এখনো কোনো পেমেন্ট নেই</div>') + '</div>';
+
+    // ৬. শীর্ষ জনপ্রিয় স্টাইল
+    var topStylesHtml = '<div class="pn"><h3>সবচেয়ে বেশি ব্যবহার হওয়া স্টাইল <a data-go="styles">সব স্টাইল</a></h3><div class="hbars">' +
+      (d.top.length ? d.top.map(function (s) {
+        return '<div><span>' + esc(s.name) + '</span><i><b style="width:' + Math.max(2, Math.round(s.used / max * 100)) + '%"></b></i><em>' + BN(s.used) + '</em></div>';
+      }).join('') : '<div class="empty">এখনো কোনো ডেটা নেই</div>') + '</div></div>';
+
+    return ah('ড্যাশবোর্ড', 'আজকের লাইভ অবস্থা ও সার্বিক মনিটরিং') +
+      quickBar +
+      gwStrip +
+      (d.pending ? '<div class="lock" data-go="payments" style="cursor:pointer;margin-bottom:20px">' + I.pay + '<div style="flex:1"><b style="color:var(--ink)">' + BN(d.pending) + 'টা পেমেন্ট যাচাইয়ের অপেক্ষায়</b> · TrxID মিলিয়ে অ্যাপ্রুভ বা EPS চেক করুন</div><span class="ghost">দেখুন</span></div>' : '') +
+      kpisHtml +
+      expHtml +
+      '<div class="g2">' + recentPaymentsHtml + topStylesHtml + '</div>';
   });
 };
 function payst(s) { return s === 'সফল' ? stp('g', 'সফল') : s === 'বাতিল' ? stp('r', 'বাতিল') : stp('o', 'অপেক্ষায়'); }
 
 // --- ৮. সদস্য ব্যবস্থাপনা ও প্রোফাইল ---
+function downloadCSV(filename, headers, rows) {
+  var csvContent = '\uFEFF';
+  csvContent += headers.map(function (h) { return '"' + String(h || '').replace(/"/g, '""') + '"'; }).join(',') + '\r\n';
+  rows.forEach(function (row) {
+    csvContent += row.map(function (cell) {
+      return '"' + String(cell == null ? '' : cell).replace(/"/g, '""') + '"';
+    }).join(',') + '\r\n';
+  });
+
+  var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  var url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename + '_' + new Date().toISOString().slice(0, 10) + '.csv');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 500);
+}
+
+function printReport(title, subtitle, headers, rows) {
+  var now = new Date();
+  var dateStr = now.toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' }) + ', ' + now.toLocaleTimeString('bn-BD');
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(title) + '</title>' +
+    '<style>' +
+    '@page { size: A4 landscape; margin: 10mm 12mm; }' +
+    '* { box-sizing: border-box; }' +
+    'body { font-family: "Hind Siliguri", "Segoe UI", Arial, sans-serif; color: #111; margin: 0; padding: 16px; font-size: 13px; }' +
+    '.header { border-bottom: 2px solid #F39200; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; }' +
+    '.header h1 { margin: 0; font-size: 20px; color: #111; font-weight: 700; }' +
+    '.header p { margin: 4px 0 0; font-size: 13px; color: #555; }' +
+    '.header .meta { text-align: right; font-size: 12px; color: #666; line-height: 1.5; }' +
+    'table { width: 100%; border-collapse: collapse; margin-top: 8px; }' +
+    'th, td { border: 1px solid #dcdcdc; padding: 7px 10px; text-align: left; vertical-align: middle; }' +
+    'th { background: #f3f4f6; font-weight: 700; color: #111; }' +
+    'tr:nth-child(even) { background: #fafafa; }' +
+    '.footer { margin-top: 20px; font-size: 11px; color: #888; display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 10px; }' +
+    '@media print { body { padding: 0; } }' +
+    '</style></head><body>' +
+    '<div class="header"><div><h1>উদ্যোক্তা গ্রাফিক্স AI — ' + esc(title) + '</h1><p>' + esc(subtitle) + '</p></div>' +
+    '<div class="meta">তারিখ ও সময়: ' + dateStr + '<br>মোট রেকর্ড: <strong>' + BN(rows.length) + 'টি</strong></div></div>' +
+    '<table><thead><tr>' + headers.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    rows.map(function (r) {
+      return '<tr>' + r.map(function (c) { return '<td>' + esc(c == null ? '—' : String(c)) + '</td>'; }).join('') + '</tr>';
+    }).join('') +
+    '</tbody></table>' +
+    '<div class="footer"><span>Uddokta Graphics AI • Confidential Admin Report</span><span>Page 1 of 1</span></div>' +
+    '</body></html>';
+
+  var w = window.open('', '_blank');
+  if (!w) return toast('পপআপ ব্লক করা আছে, ব্রাউজারে পপআপ অ্যালাউ করুন', 1);
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function () {
+    w.focus();
+    w.print();
+  }, 400);
+}
+
+function exportMembers(type) {
+  var L = A.members || [], q = (A.mq || '').trim().toLowerCase();
+  var F = {
+    all: function () { return true; },
+    paid: function (m) { return m.paid; },
+    verified: function (m) { return !!m.verified; },
+    unverified: function (m) { return !m.verified; },
+    soon: function (m) { return m.paid && m.daysLeft <= 15; },
+    new: function (m) { return !m.paid && !m.expired && m.status !== 'বন্ধ'; },
+    expired: function (m) { return m.expired; },
+    blocked: function (m) { return m.status === 'বন্ধ'; }
+  };
+  var list = L.filter(F[A.mf] || F.all).filter(function (m) {
+    return !q || ((m.phone || '') + ' ' + (m.brand || '') + ' ' + (m.biz || '')).toLowerCase().indexOf(q) > -1;
+  });
+
+  if (!list.length) return toast('এক্সপোর্ট করার মতো কোনো মেম্বার পাওয়া যায়নি', 1);
+
+  var headers = [
+    'মোবাইল নম্বর',
+    'ব্র্যান্ডের নাম',
+    'ট্যাগলাইন',
+    'ব্যবসার ধরন',
+    'মেম্বারশিপ অবস্থা',
+    'ভেরিফিকেশন',
+    'যোগদানের তারিখ',
+    'মেয়াদ শেষ',
+    'বাকি দিন',
+    'মোট ডিজাইন'
+  ];
+
+  var rows = list.map(function (m) {
+    var st = m.status === 'বন্ধ' ? 'বন্ধ' : (m.paid ? 'চালু' : (m.expired ? 'মেয়াদ শেষ' : 'নতুন'));
+    return [
+      m.phone || '',
+      m.brand || 'সেটআপ হয়নি',
+      m.tagline || '',
+      m.biz || 'সাধারণ',
+      st,
+      m.verified ? 'ভেরিফাইড' : 'আনভেরিফাইড',
+      m.joined || '',
+      m.expiry || '—',
+      m.paid ? String(m.daysLeft || 0) : '—',
+      String(m.made || 0)
+    ];
+  });
+
+  if (type === 'csv') {
+    downloadCSV('uddokta_members', headers, rows);
+    toast('মেম্বারদের এক্সেল ফাইল ডাউনলোড হয়েছে ✓');
+  } else {
+    printReport('সদস্য তালিকা রিপোর্ট', (A.mf === 'all' && !q ? 'সকল সদস্যের তালিকা' : 'ফিল্টারকৃত সদস্য তালিকা'), headers, rows);
+  }
+}
+
+function exportPayments(type) {
+  var L = A.pays || [];
+  var list = L.filter(function (p) { return A.pf === 'সব' || p.status === A.pf; });
+
+  if (!list.length) return toast('এক্সপোর্ট করার মতো কোনো পেমেন্ট পাওয়া যায়নি', 1);
+
+  var headers = [
+    'পেমেন্ট আইডি',
+    'তারিখ ও সময়',
+    'মোবাইল নম্বর',
+    'ব্র্যান্ডের নাম',
+    'পেমেন্ট মাধ্যম',
+    'EPS TrxID',
+    'টাকার পরিমাণ (৳)',
+    'পেমেন্ট অবস্থা',
+    'নোট'
+  ];
+
+  var rows = list.map(function (p) {
+    return [
+      p.id || '',
+      dt(p.time) || '',
+      p.phone || '',
+      (A.brandOf && A.brandOf[p.phone]) || 'সেটআপ হয়নি',
+      p.method || 'EPS',
+      p.trx || '—',
+      String(p.amount || 0),
+      p.status || '',
+      p.note || ''
+    ];
+  });
+
+  if (type === 'csv') {
+    downloadCSV('uddokta_payments', headers, rows);
+    toast('পেমেন্ট ট্রানজ্যাকশন এক্সেল ফাইল ডাউনলোড হয়েছে ✓');
+  } else {
+    printReport('পেমেন্ট ও সেলস রিপোর্ট', (A.pf === 'সব' ? 'সকল পেমেন্ট ও সেলস ট্রানজ্যাকশন' : A.pf + ' পেমেন্ট তালিকা'), headers, rows);
+  }
+}
+
 A.mf = 'all'; A.mq = '';
 function memSt(m) { return m.status === 'বন্ধ' ? stp('m', 'বন্ধ') : m.paid ? (m.daysLeft <= 15 ? stp('o', 'শেষের পথে · ' + BN(m.daysLeft) + ' দিন') : stp('g', 'চালু')) : m.expired ? stp('r', 'মেয়াদ শেষ') : stp('m', 'নতুন'); }
 P.members = function () {
@@ -410,7 +732,10 @@ P.members = function () {
       m.hasPassword = (a.has_password != null) ? a.has_password : false;
       return m;
     });
-    return ah('মেম্বার', 'সব কাস্টমার, তাদের মেম্বারশিপ আর ব্যবহার', '<a class="btn sm" onclick="addMember()">' + I.plus + 'মেম্বার যোগ করুন</a>') + '<div id="mlist"></div>';
+    var acts = '<a class="btn sm sec" onclick="exportMembers(\'csv\')">' + I.dl + ' এক্সেল ডাউনলোড</a>' +
+      '<a class="btn sm sec" onclick="exportMembers(\'pdf\')">' + I.pdf + ' PDF রিপোর্ট</a>' +
+      '<a class="btn sm" onclick="addMember()">' + I.plus + 'মেম্বার যোগ</a>';
+    return ah('মেম্বার', 'সব কাস্টমার, তাদের মেম্বারশিপ আর ব্যবহার', acts) + '<div id="mlist"></div>';
   });
 };
 AF.members = function () { drawMembers(); };
@@ -442,7 +767,7 @@ function drawMembers() {
     '<div class="pn tw">' + (list.length ? '<table class="tbl"><thead><tr><th>ব্র্যান্ড</th><th>ব্যবসার ধরন</th><th>মেম্বারশিপ</th><th>ভেরিফিকেশন</th><th>মেয়াদ</th><th class="r">কমান্ড</th><th>শেষ ব্যবহার</th><th></th></tr></thead><tbody>' +
       list.slice(0, 300).map(function (m) {
         var vTag = m.verified ? '<span class="st g">ভেরিফাইড ✓</span>' : '<span class="st o">আনভেরিফাইড</span>';
-        return '<tr data-go="member" data-arg="' + esc(m.phone) + '" style="cursor:pointer"><td><div class="th"><span class="cdot">' + [m.c1, m.c2, m.c3].map(function (c) { return '<i style="background:' + esc(c || '#2F2F37') + '"></i>'; }).join('') + '</span><div><b>' + esc(m.brand || '(সেটআপ হয়নি)') + '</b><small>' + esc(m.phone) + '</small></div></div></td><td>' + esc(m.biz || '—') + '</td><td>' + memSt(m) + '</td><td>' + vTag + '</td><td>' + dt(m.expiry) + '</td><td class="r">' + BN(m.made || 0) + '</td><td>' + dt(m.last) + '</td><td><a class="ed">খুলুন</a></td></tr>';
+        return '<tr data-go="member" data-arg="' + esc(m.phone) + '" style="cursor:pointer"><td><div class="th"><span class="cdot">' + [m.c1, m.c2, m.c3].map(function (c) { return '<i style="background:' + esc(c || '#2F2F37') + '"></i>'; }).join('') + '</span><div><b>' + esc(m.brand || '(সেটআপ হয়নি)') + '</b><small>' + esc(m.phone) + '</small></div></div></td><td>' + esc(m.biz || '—') + '</td><td>' + memSt(m) + '</td><td>' + vTag + '</td><td>' + dt(m.expiry) + '</td><td class="r">' + BN(m.made || 0) + '</td><td>' + dt(m.last) + '</td><td><div style="display:flex;gap:6px;justify-content:flex-end;align-items:center"><a class="ed">খুলুন</a><a class="ed dng" onclick="event.stopPropagation();delMember(\'' + esc(m.phone) + '\')">মুছুন</a></div></td></tr>';
       }).join('') + '</tbody></table>' : '<div class="empty">কোনো মেম্বার পাওয়া যায়নি</div>') + '</div>';
 }
 function addMember() {
@@ -452,13 +777,30 @@ function addMember() {
 }
 function doAddMember() { call('a_member_add', { phone: $('nmp').value, days: $('nmd').value, note: $('nmn').value }, 'মেম্বার যোগ হয়েছে ✓').then(function () { closeModal(); render('members'); }).catch(function () {}); }
 P.member = function (ph) {
-  return Promise.all([api('a_members'), api('a_payments'), rpc('check_member_auth', { p_phone: ph })]).then(function (rs) {
+  return Promise.all([api('a_members'), api('a_payments'), rpc('check_member_auth', { p_phone: ph }), load(['biz'])]).then(function (rs) {
     var m = (rs[0].list || []).filter(function (x) { return x.phone === ph; })[0]; if (!m) return ah('মেম্বার পাওয়া যায়নি', '', '', ['members', 'সব মেম্বার']);
     var authInfo = rs[2] || {};
     m.verified = (authInfo.verified != null) ? authInfo.verified : false;
     m.hasPassword = (authInfo.has_password != null) ? authInfo.has_password : false;
+    var isUnlocked = !!(authInfo.brand_unlocked || m.brand_unlocked || (m.note && m.note.indexOf('[UNLOCKED]') > -1));
+    m.brand_unlocked = isUnlocked;
     A.edit = m; var pays = (rs[1].list || []).filter(function (p) { return p.phone === ph; });
     var shapes = { wide: 'চওড়া', square: 'চৌকো', tall: 'লম্বা' };
+
+    var defaultBizList = ['খাবার ও অর্গানিক', 'পোশাক ও ফ্যাশন', 'কসমেটিকস ও স্কিনকেয়ার', 'ইলেকট্রনিক্স ও গ্যাজেট', 'বই ও স্টেশনারি', 'ফার্নিচার ও হোম ডেকর', 'সার্ভিস ও এজেন্সি', 'অন্যান্য'];
+    var rawBiz = (A.data && A.data.biz) || [];
+    var bizOptions = [];
+    rawBiz.forEach(function (b) {
+      var name = typeof b === 'string' ? b : (b.name || '');
+      if (name && bizOptions.indexOf(name) < 0) bizOptions.push(name);
+    });
+    defaultBizList.forEach(function (b) {
+      if (bizOptions.indexOf(b) < 0) bizOptions.push(b);
+    });
+    if (m.biz && bizOptions.indexOf(m.biz) < 0) {
+      bizOptions.unshift(m.biz);
+    }
+
     var authBadge = m.verified ? '<span class="st g" style="font-size:13px;padding:3px 8px">✓ ভেরিফাইড (পাসওয়ার্ড দিয়ে লগইন)</span>' : '<span class="st o" style="font-size:13px;padding:3px 8px">⚠ আনভেরিফাইড (ওটিপি লাগবে)</span>';
     var authCard = '<div class="pn" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><h3>লগইন ও ভেরিফিকেশন নিরাপত্তা</h3>' + authBadge + '</div>' +
       '<p style="color:var(--mut);font-size:13.5px;margin:8px 0 14px;line-height:1.5">' +
@@ -472,16 +814,36 @@ P.member = function (ph) {
       '<div class="ewrap"><div><div class="pn"><h3>মেম্বারশিপ ' + memSt(m) + '</h3><div class="fg2"><div class="fl"><label><span>অবস্থা</span></label><div class="sel"><select class="in" id="ms" onchange="setDirty()">' + ['নতুন', 'পেইড', 'বন্ধ'].map(function (s) { return '<option' + (m.status === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select></div></div>' +
       '<div class="fl"><label><span>মেয়াদ শেষ হবে</span></label><input class="in" type="date" id="me" value="' + esc(m.expiry) + '" onchange="setDirty()"></div></div>' +
       '<div class="qbtn"><span>মেয়াদ বাড়ান:</span><a class="ghost" onclick="extend(30)">+৩০ দিন</a><a class="ghost" onclick="extend(365)">+১ বছর</a></div>' +
-      '<div class="fl"><label><span>নোট</span><small>শুধু অ্যাডমিন দেখবে</small></label><input class="in" id="mn" value="' + esc(m.note) + '" placeholder="নোট বা মন্তব্যের বিবরণ (যেমন: বিশেষ ছাড় দেওয়া হয়েছে)" oninput="setDirty()"></div></div>' +
+      '<div class="fl"><label><span>নোট</span><small>শুধু অ্যাডমিন দেখবে</small></label><input class="in" id="mn" value="' + esc((m.note || '').replace(/\[UNLOCKED\]/g, '').trim()) + '" placeholder="নোট বা মন্তব্যের বিবরণ (যেমন: বিশেষ ছাড় দেওয়া হয়েছে)" oninput="setDirty()"></div></div>' +
       authCard +
       '<div class="pn" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center"><h3>ব্র্যান্ড ও লোগো</h3>' + (m.logo_url ? '<a href="' + esc(m.logo_url) + '" target="_blank" rel="noopener" style="font-size:12.5px;color:var(--or)">লোগো লিঙ্ক ↗</a>' : '') + '</div>' +
-      (m.logo_url ? '<div style="display:flex;align-items:center;gap:14px;margin:12px 0 16px;padding:10px;background:var(--card2);border:1px solid var(--line);border-radius:10px"><div style="width:56px;height:56px;border-radius:8px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="' + esc(m.logo_url) + '" alt="Logo" style="max-width:100%;max-height:100%;object-fit:contain"></div><div><b style="font-size:14px;color:var(--ink)">ক্লাউড ব্র্যান্ড লোগো</b><div style="font-size:12px;color:var(--mut)">কাস্টমারের আসল ক্লাউডে সংরক্ষিত লোগো</div></div></div>' : '<div style="font-size:13px;color:var(--mut);margin:10px 0 14px">লোগো এখনো ক্লাউডে সেভ করা হয়নি</div>') +
+      (m.logo_url ?
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0 16px;padding:12px;background:var(--card2);border:1px solid var(--line);border-radius:10px;flex-wrap:wrap">' +
+          '<div style="display:flex;align-items:center;gap:14px">' +
+            '<div style="width:58px;height:58px;border-radius:8px;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px"><img src="' + esc(m.logo_url) + '" alt="Logo" style="max-width:100%;max-height:100%;object-fit:contain"></div>' +
+            '<div><b style="font-size:14px;color:var(--ink)">ক্লাউড ব্র্যান্ড লোগো</b><div style="font-size:12px;color:var(--mut)">কাস্টমারের আসল ক্লাউডে সংরক্ষিত লোগো</div></div>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;align-items:center">' +
+            '<label class="btn sm sec" style="height:32px;font-size:12.5px;padding:0 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px">' + (I.img || I.upl || '') + ' লোগো বদলান<input type="file" accept="image/*" style="display:none" onchange="adminUploadMemberLogo(this,\'' + esc(m.phone) + '\')"></label>' +
+            '<a class="btn sm red" style="height:32px;font-size:12.5px;padding:0 10px" onclick="adminRemoveMemberLogo(\'' + esc(m.phone) + '\')">মুছুন</a>' +
+          '</div>' +
+        '</div>' :
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0 16px;padding:14px;background:var(--card2);border:1px dashed var(--line);border-radius:10px;flex-wrap:wrap">' +
+          '<div style="font-size:13px;color:var(--mut)">লোগো এখনো ক্লাউডে সেভ করা হয়নি</div>' +
+          '<label class="btn sm" style="height:32px;font-size:12.5px;padding:0 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px">' + (I.plus || '') + ' লোগো আপলোড করুন<input type="file" accept="image/*" style="display:none" onchange="adminUploadMemberLogo(this,\'' + esc(m.phone) + '\')"></label>' +
+        '</div>') +
       '<div class="fg2"><div class="fl"><label><span>ব্র্যান্ডের নাম</span></label><input class="in" id="mb" value="' + esc(m.brand) + '" placeholder="ব্র্যান্ডের নাম (যেমন: পল্লী বাজার)" oninput="setDirty()"></div><div class="fl"><label><span>ট্যাগলাইন</span></label><input class="in" id="mt" value="' + esc(m.tagline) + '" placeholder="ট্যাগলাইন বা স্লোগান (যেমন: খাঁটি গাওয়া ঘি আর অর্গানিক খাবার)" oninput="setDirty()"></div>' +
-      '<div class="fl"><label><span>ব্যবসার ধরন</span></label><input class="in" id="mz" value="' + esc(m.biz) + '" placeholder="ব্যবসার ধরন (যেমন: খাদ্যপণ্য ও ই-কমার্স)" oninput="setDirty()"></div><div class="fl"><label><span>লোগোর আকার</span></label><div class="in v">' + esc(shapes[m.shape] || '—') + '</div></div></div>' +
-      '<div class="fl"><label><span>ব্র্যান্ডের রং</span></label><div class="sw3">' + [m.c1, m.c2, m.c3].map(function (c) { return '<div><span style="background:' + esc(c || '#2F2F37') + '"></span><em>' + esc(c || '—') + '</em></div>'; }).join('') + '</div></div></div>' +
-      savebar('saveMember()') + '</div><div><div class="pn"><h3>ব্যবহার</h3><ul class="ls"><li>মোট কাস্টমাইজড কমান্ড<b>' + BN(m.made || 0) + '</b></li><li>শেষ ব্যবহার<b>' + dt(m.last) + '</b></li><li>বাকি দিন<b>' + (m.paid ? BN(m.daysLeft) : '—') + '</b></li></ul></div>' +
+      '<div class="fl"><label><span>ব্যবসার ধরন</span></label><div class="sel"><select class="in" id="mz" onchange="setDirty()"><option value="">বেছে নিন</option>' + bizOptions.map(function (b) { return '<option value="' + esc(b) + '"' + (m.biz === b ? ' selected' : '') + '>' + esc(b) + '</option>'; }).join('') + '</select></div></div><div class="fl"><label><span>লোগোর আকার</span></label><div class="in v">' + esc(shapes[m.shape] || '—') + '</div></div></div>' +
+      '<div class="fl"><label><span>ব্র্যান্ডের রং</span></label><div class="sw3">' + [m.c1, m.c2, m.c3].map(function (c) { return '<div><span style="background:' + esc(c || '#2F2F37') + '"></span><em>' + esc(c || '—') + '</em></div>'; }).join('') + '</div></div>' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">' +
+        '<div>' +
+          (m.brand ? (m.brand_unlocked ? '<span class="st o" style="font-size:12.5px;padding:3px 8px">🔓 এডিট আনলক করা (কাস্টমার অ্যাপে এডিট করতে পারবে)</span>' : '<span class="st g" style="font-size:12.5px;padding:3px 8px">🔒 ব্র্যান্ড লক করা (কাস্টমার বদলাতে পারবে না)</span>') : '<span class="st m" style="font-size:12.5px;padding:3px 8px">সেটআপ হয়নি</span>') +
+        '</div>' +
+        (m.brand ? '<a class="btn sm sec" style="height:32px;font-size:12.5px;padding:0 12px" onclick="adminToggleBrandUnlock(\'' + esc(m.phone) + '\',' + (!m.brand_unlocked) + ')">' + (m.brand_unlocked ? 'পুনরায় লক করুন' : 'কাস্টমারকে এডিট করার অনুমতি দিন (আনলক)') + '</a>' : '') +
+      '</div></div>' +
+      savebar('saveMember()', '<a class="btn sm red" onclick="delMember(\'' + esc(m.phone) + '\')">মেম্বার মুছে ফেলুন</a>') + '</div><div><div class="pn"><h3>ব্যবহার</h3><ul class="ls"><li>মোট কাস্টমাইজড কমান্ড<b>' + BN(m.made || 0) + '</b></li><li>শেষ ব্যবহার<b>' + dt(m.last) + '</b></li><li>বাকি দিন<b>' + (m.paid ? BN(m.daysLeft) : '—') + '</b></li></ul></div>' +
       '<div class="pn" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center"><h3>তৈরি করা ডিজাইন হিস্ট্রি</h3><small id="amhist-count" style="color:var(--mut)"></small></div><div id="amhist-list" style="margin-top:12px"><div class="empty">হিস্ট্রি লোড হচ্ছে…</div></div></div>' +
-      '<div class="pn" style="margin-top:16px"><h3>পেমেন্ট</h3>' + (pays.length ? '<ul class="ls">' + pays.map(function (p) { return '<li><div>৳' + BN(p.amount) + ' · ' + esc(p.method) + '<small>' + dt(p.time) + ' · ' + esc(p.trx) + '</small></div>' + payst(p.status) + '</li>'; }).join('') + '</ul>' : '<div class="empty">কোনো পেমেন্ট নেই</div>') + '</div></div></div>';
+      '<div class="pn" style="margin-top:16px"><h3>পেমেন্ট</h3>' + (pays.length ? '<ul class="ls">' + pays.map(function (p) { return '<li style="display:flex;justify-content:space-between;align-items:center;gap:10px"><div>৳' + BN(p.amount) + ' · ' + esc(p.method) + '<small>' + dt(p.time) + ' · ' + esc(p.trx) + '</small></div><div style="display:flex;align-items:center;gap:8px">' + payst(p.status) + '<a class="ghost dng" style="font-size:12px;color:var(--bad);cursor:pointer;padding:2px 8px;border-color:rgba(240,96,106,0.35)" onclick="delPay(\'' + esc(p.id) + '\',\'' + esc(m.phone) + '\')">মুছুন</a></div></li>'; }).join('') + '</ul>' : '<div class="empty">কোনো পেমেন্ট নেই</div>') + '</div></div></div>';
   });
 };
 AF.member = function () {
@@ -527,7 +889,27 @@ function extend(n) {
 }
 function saveMember() {
   var m = A.edit;
-  call('a_member', { phone: m.phone, set: { status: $('ms').value, expiry: $('me').value, note: $('mn').value, brand: $('mb').value, tagline: $('mt').value, biz: $('mz').value } }, 'সেভ হয়েছে ✓').then(function () { A.dirty = false; rer(); }).catch(function () {});
+  var isUnlocked = !!(m.brand_unlocked || (m.note && m.note.indexOf('[UNLOCKED]') > -1));
+  var noteVal = $('mn') ? $('mn').value.trim() : '';
+  if (isUnlocked && noteVal.indexOf('[UNLOCKED]') < 0) {
+    noteVal = (noteVal ? noteVal + ' ' : '') + '[UNLOCKED]';
+  } else if (!isUnlocked) {
+    noteVal = noteVal.replace(/\[UNLOCKED\]/g, '').trim();
+  }
+  call('a_member', {
+    phone: m.phone,
+    set: {
+      status: $('ms').value,
+      expiry: $('me').value,
+      note: noteVal,
+      brand: $('mb').value,
+      tagline: $('mt').value,
+      biz: $('mz').value
+    }
+  }, 'সেভ হয়েছে ✓').then(function () {
+    A.dirty = false;
+    render('member', m.phone);
+  }).catch(function () {});
 }
 function adminResetAuth(ph) {
   confirmBox('ভেরিফিকেশন রিসেট করবেন?', 'ভেরিফিকেশন রিসেট করলে এই নম্বরে পাসওয়ার্ড মুছে যাবে এবং কাস্টমার অ্যাপে এই নম্বর দিলে পুনরায় SMS ও ওটিপি ভেরিফিকেশন ধাপ শুরু হবে। ফলে আপনি একই নম্বর দিয়ে বারবার SMS ডেলিভারি টেস্ট করতে পারবেন।', 'হ্যাঁ, রিসেট করুন', function () {
@@ -553,6 +935,111 @@ function adminToggleVerify(ph, isV) {
     toast('আপডেট করা যায়নি: ' + (e.message || e), 1);
   });
 }
+function adminToggleBrandUnlock(ph, unlock) {
+  busy(1);
+  rpc('admin_toggle_brand_unlock', { p_phone: ph, p_unlocked: unlock }).then(function (res) {
+    if (res && res.error) throw new Error(res.error.message || res.error);
+    var curNote = (A.edit && A.edit.phone === ph && A.edit.note) || '';
+    var newNote = curNote;
+    if (unlock) {
+      if (newNote.indexOf('[UNLOCKED]') < 0) newNote = (newNote ? newNote + ' ' : '') + '[UNLOCKED]';
+    } else {
+      newNote = newNote.replace(/\[UNLOCKED\]/g, '').trim();
+    }
+    return call('a_member', { phone: ph, set: { brand_unlocked: unlock, note: newNote } }, unlock ? 'ব্র্যান্ড এডিট আনলক করা হয়েছে ✓ কাস্টমার এখন অ্যাপে লোগো ও তথ্য বদলাতে পারবে' : 'ব্র্যান্ড লক করা হয়েছে ✓');
+  }).then(function () {
+    busy(0);
+    render('member', ph);
+  }).catch(function () {
+    var curNote = (A.edit && A.edit.phone === ph && A.edit.note) || '';
+    var newNote = curNote;
+    if (unlock) {
+      if (newNote.indexOf('[UNLOCKED]') < 0) newNote = (newNote ? newNote + ' ' : '') + '[UNLOCKED]';
+    } else {
+      newNote = newNote.replace(/\[UNLOCKED\]/g, '').trim();
+    }
+    call('a_member', { phone: ph, set: { note: newNote } }, unlock ? 'ব্র্যান্ড এডিট আনলক করা হয়েছে ✓ কাস্টমার এখন অ্যাপে লোগো ও তথ্য বদলাতে পারবে' : 'ব্র্যান্ড লক করা হয়েছে ✓').then(function () {
+      busy(0);
+      render('member', ph);
+    }).catch(function (err) {
+      busy(0);
+      toast('ব্যর্থ হয়েছে: ' + (err.message || err), 1);
+    });
+  });
+}
+function adminUploadMemberLogo(inp, ph) {
+  var file = inp.files && inp.files[0];
+  if (!file) return;
+  busy(1);
+  var rd = new FileReader();
+  rd.onload = function () {
+    var im = new Image();
+    im.onload = function () {
+      var max = 300, sc = Math.min(1, max / Math.max(im.width, im.height));
+      var w = Math.max(1, Math.round(im.width * sc)), h = Math.max(1, Math.round(im.height * sc));
+      var cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      var ctx = cv.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(im, 0, 0, w, h);
+      var dataUrl = cv.toDataURL('image/png');
+
+      call('a_upload', { name: file.name || 'member-logo.png', mime: 'image/png', data: dataUrl }, 'লোগো ক্লাউডে আপলোড হয়েছে ✓').then(function (r) {
+        if (!r || !r.url) throw new Error('আপলোড লিঙ্ক পাওয়া যায়নি');
+        return call('a_member', { phone: ph, set: { logo_url: r.url } }, 'লোগো সফলভাবে সেভ হয়েছে ✓');
+      }).then(function () {
+        busy(0);
+        render('member', ph);
+      }).catch(function (e) {
+        busy(0);
+        toast('লোগো সেভ করা যায়নি: ' + (e.message || e), 1);
+      });
+    };
+    im.onerror = function () {
+      busy(0);
+      toast('ছবিটি লোড করা যায়নি', 1);
+    };
+    im.src = rd.result;
+  };
+  rd.onerror = function () {
+    busy(0);
+    toast('ফাইলটি পড়া যায়নি', 1);
+  };
+  rd.readAsDataURL(file);
+}
+function adminRemoveMemberLogo(ph) {
+  confirmBox('লোগো মুছে ফেলবেন?', 'এই মেম্বারের ক্লাউড লোগো মুছে ফেলা হবে।', 'হ্যাঁ, মুছে ফেলুন', function () {
+    busy(1);
+    call('a_member', { phone: ph, set: { logo_url: '' } }, 'লোগো মুছে ফেলা হয়েছে ✓').then(function () {
+      busy(0);
+      render('member', ph);
+    }).catch(function (e) {
+      busy(0);
+      toast('মুছে ফেলা যায়নি: ' + (e.message || e), 1);
+    });
+  }, 1);
+}
+function delMember(ph) {
+  typeConfirmBox('মেম্বার মুছে ফেলবেন?', 'এই মেম্বার (' + esc(ph) + '), তার পেমেন্ট এবং সব ডিজাইন হিস্ট্রি স্থায়ীভাবে মুছে যাবে। ড্যাশবোর্ডের মোট আয় স্বয়ংক্রিয়ভাবে হিসাব হয়ে কমে যাবে। এই কাজ আর ফেরত আনা যাবে না।', ph, 'হ্যাঁ, মুছে ফেলুন', function () {
+    call('a_member_del', { phone: ph }, 'মেম্বার মুছে ফেলা হয়েছে ✓').then(function () {
+      A.dirty = false;
+      if (A.page === 'member') nav('members');
+      else render('members');
+    }).catch(function () {});
+  }, 1);
+}
+function delPay(id, ph) {
+  typeConfirmBox('পেমেন্টটি মুছে ফেলবেন?', 'এই পেমেন্ট রেকর্ডটি মুছে ফেললে ড্যাশবোর্ডের মাসিক ও মোট আয় স্বয়ংক্রিয়ভাবে হিসাব হয়ে কমে যাবে। এই কাজ আর ফেরত আনা যাবে না।', 'DELETE', 'হ্যাঁ, মুছে ফেলুন', function () {
+    call('a_pay_del', { id: id }, 'পেমেন্ট মুছে ফেলা হয়েছে ✓').then(function () {
+      if (A.page === 'member' && ph) {
+        render('member', ph);
+      } else {
+        render('payments');
+      }
+    }).catch(function () {});
+  }, 1);
+}
 
 // --- ৯. পেমেন্ট ভেরিফিকেশন ও অনুমোদন ---
 A.pf = 'অপেক্ষায়';
@@ -562,7 +1049,9 @@ P.payments = function () {
     if (!rs[0].ok) throw new Error(rs[0].err);
     A.pays = rs[0].list; A.brandOf = {}; (rs[1].list || []).forEach(function (m) { A.brandOf[m.phone] = m.brand; });
     A.pending = A.pays.filter(function (p) { return p.status === 'অপেক্ষায়'; }).length;
-    return ah('পেমেন্ট', 'EPS দিয়ে অটোমেটিক পেমেন্ট। পেমেন্ট সফল হলে মেম্বারশিপ নিজে থেকেই চালু হয়, এখানে কিছু অ্যাপ্রুভ করতে হয় না।') + '<div id="plist"></div>';
+    var acts = '<a class="btn sm sec" onclick="exportPayments(\'csv\')">' + I.dl + ' এক্সেল ডাউনলোড</a>' +
+      '<a class="btn sm sec" onclick="exportPayments(\'pdf\')">' + I.pdf + ' PDF রিপোর্ট</a>';
+    return ah('পেমেন্ট', 'EPS দিয়ে অটোমেটিক পেমেন্ট। পেমেন্ট সফল হলে মেম্বারশিপ নিজে থেকেই চালু হয়, এখানে কিছু অ্যাপ্রুভ করতে হয় না।', acts) + '<div id="plist"></div>';
   });
 };
 AF.payments = function () { drawPays(); };
@@ -574,10 +1063,10 @@ function drawPays() {
     '<div class="pn tw">' + (list.length ? '<table class="tbl"><thead><tr><th>সময়</th><th>মেম্বার</th><th>মাধ্যম</th><th>EPS TrxID</th><th class="r">টাকা</th><th>অবস্থা</th><th></th></tr></thead><tbody>' +
       list.map(function (p) {
         return '<tr><td>' + dt(p.time) + '<small class="mut2">#' + esc(p.id) + '</small></td><td><div class="th"><div><b>' + esc(A.brandOf[p.phone] || '(ব্র্যান্ড সেটআপ হয়নি)') + '</b><small>' + esc(p.phone) + '</small></div></div></td><td>' + esc(p.method) + '</td><td><b class="trx">' + esc(p.trx || '—') + '</b></td><td class="r">৳' + BN(p.amount) + '</td><td>' + payst(p.status) + (p.note ? '<small class="mut2">' + esc(p.note) + '</small>' : '') + '</td>' +
-          '<td>' + (p.status === 'অপেক্ষায়' ? '<a class="btn sm sec" style="height:34px;font-size:13.5px;padding:0 12px" onclick="payCheck(\'' + esc(p.id) + '\')">EPS-এ যাচাই করুন</a>' : '') + '</td></tr>';
+          '<td><div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">' + (p.status === 'অপেক্ষায়' ? '<a class="btn sm sec" style="height:32px;font-size:12.5px;padding:0 10px" onclick="payCheck(\'' + esc(p.id) + '\')">EPS-এ যাচাই করুন</a>' : '') + '<a class="btn sm red" style="height:32px;font-size:12.5px;padding:0 10px" onclick="delPay(\'' + esc(p.id) + '\')">মুছুন</a></div></td></tr>';
       }).join('') + '</tbody></table>' : '<div class="empty">কিছু নেই</div>') + '</div>';
 }
-function payCheck(id) { call('a_pay_check', { id: id }).then(function (r) { toast('অবস্থা: ' + (r.status || '—') + (r.eps ? ' (EPS: ' + r.eps + ')' : '')); render('payments'); }).catch(function () {}); }
+function payCheck(id) { call('a_pay_check', { id: id }).then(function (r) { toast('অবস্থা: ' + (r.status || '—') + (r.eps ? ' (EPS: ' + r.eps + ')' : '')); render(A.page || 'payments'); }).catch(function () {}); }
 
 // --- ১০. স্টাইল তালিকা ও গ্রিড ভিউ ---
 A.sf = 'all';
@@ -806,7 +1295,7 @@ function saveStyle() {
   var st = {}; ['id', 'cat', 'name', 'img', 'attach', 'logo', 'style', 'status', 'pop', 'font1', 'font2'].forEach(function (k) { st[k] = s[k] == null ? '' : String(s[k]); });
   call('a_style_save', { style: st, fields: cleanFields(), oldId: E.oldId }, 'স্টাইল সেভ হয়েছে ✓').then(function (r) { A.dirty = false; history.replaceState({ p: 'style', a: r.id }, '', '#style/' + encodeURIComponent(r.id)); render('style', r.id); }).catch(function () {});
 }
-function delStyle() { var s = A.edit.s; confirmBox('"' + esc(s.name) + '" মুছে ফেলবেন?', 'স্টাইল আর এর সব ঘর মুছে যাবে, ফেরত আনা যাবে না। শুধু লুকাতে চাইলে "ড্রাফট" করে দিন।', 'হ্যাঁ, মুছে ফেলুন', function () { call('a_style_del', { id: A.edit.oldId }, 'মুছে ফেলা হয়েছে').then(function () { A.dirty = false; nav('styles'); }).catch(function () {}); }, 1); }
+function delStyle() { var s = A.edit.s; typeConfirmBox('"' + esc(s.name) + '" মুছে ফেলবেন?', 'স্টাইল আর এর সব ঘর মুছে যাবে, ফেরত আনা যাবে না। শুধু লুকাতে চাইলে "ড্রাফট" করে দিন।', 'DELETE', 'হ্যাঁ, মুছে ফেলুন', function () { call('a_style_del', { id: A.edit.oldId }, 'মুছে ফেলা হয়েছে').then(function () { A.dirty = false; nav('styles'); }).catch(function () {}); }, 1); }
 
 // --- ১২. মাস্টার AI বেস কমান্ড এডিটর ---
 P.base = function () {
@@ -2193,7 +2682,17 @@ P.settings = function () {
       '<div class="pn" style="margin-top:16px;max-width:560px"><h3>অ্যাডমিন পাসওয়ার্ড বদলান</h3>' +
       '<div class="fl"><label><span>বর্তমান পাসওয়ার্ড</span></label><div class="pass-wrap"><input class="in" id="po" type="password" placeholder="বর্তমান পাসওয়ার্ড লিখুন"><button type="button" class="eye-btn" onclick="togglePass(\'po\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div></div>' +
       '<div class="fl"><label><span>নতুন পাসওয়ার্ড</span><small>কমপক্ষে ৮ অক্ষর</small></label><div class="pass-wrap"><input class="in" id="pn1" type="password" placeholder="নতুন পাসওয়ার্ড লিখুন (কমপক্ষে ৮ অক্ষর)"><button type="button" class="eye-btn" onclick="togglePass(\'pn1\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div></div>' +
-      '<div class="tacts"><a class="btn sm" onclick="savePass()">পাসওয়ার্ড বদলান</a></div></div>';
+      '<div class="tacts"><a class="btn sm" onclick="savePass()">পাসওয়ার্ড বদলান</a></div></div>' +
+
+      // Row 4: বিপদজনক অঞ্চল (Danger Zone) - টেস্ট ডেটা রিসেট
+      '<div class="pn danger-zone-box" style="margin-top:20px;border:1px solid rgba(239,68,68,.35);background:rgba(239,68,68,.03)">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+      '<div style="width:34px;height:34px;border-radius:8px;background:rgba(239,68,68,.15);color:#ef4444;display:flex;align-items:center;justify-content:center;flex:none">' + I.alert + '</div>' +
+      '<div><h3 style="color:#ef4444;margin:0;font-size:16px">বিপদজনক অঞ্চল (Danger Zone) · টেস্ট ডেটা রিসেট</h3>' +
+      '<p style="font-size:13px;color:var(--mut);margin:2px 0 0">লাইভ প্রডাকশন শুরুর আগে টেস্ট মেম্বার ও ট্রানজ্যাকশন মুছে ড্যাশবোর্ড একদম ফ্রেশ ০ করুন</p></div></div>' +
+      '<p style="font-size:13px;color:var(--mut2);line-height:1.6;margin:12px 0 16px">' +
+      'এই কাজটি সম্পন্ন করলে সকল টেস্ট মেম্বার, লগইন ও ওটিপি হিস্ট্রি এবং টেস্ট পেমেন্ট রেকর্ড স্থায়ীভাবে মুছে যাবে। ড্যাশবোর্ডের সকল আয় ও ব্যবহারের পরিসংখ্যান শূন্য (০) হয়ে যাবে। <strong>আপনার সিস্টেম সেটিংস, এপিআই কি, স্টাইল কনফিগারেশন ও অ্যাডমিন পাসওয়ার্ড সম্পূর্ণ অক্ষত থাকবে।</strong></p>' +
+      '<div class="tacts"><a class="btn sm red" onclick="adminResetTestData()">' + I.alert + 'সব টেস্ট ডেটা রিসেট করুন</a></div></div>';
   });
 };
 
@@ -2212,6 +2711,34 @@ function saveEps() {
 }
 function testEps() { call('a_eps_test', {}, 'EPS-এর সাথে সংযোগ ঠিক আছে ✓').catch(function () {}); }
 function savePass() { call('a_pass', { old: $('po').value, pass: $('pn1').value }, 'পাসওয়ার্ড বদলানো হয়েছে ✓').then(function () { $('po').value = ''; $('pn1').value = ''; }).catch(function () {}); }
+function adminResetTestData() {
+  typeConfirmBox(
+    'সব টেস্ট ডেটা মুছে ফ্রেশ শুরু করতে চান?',
+    'এই কাজটি সম্পন্ন করলে সকল টেস্ট মেম্বার, ওটিপি কোড এবং পেমেন্ট ট্রানজ্যাকশন হিস্ট্রি স্থায়ীভাবে মুছে যাবে। ড্যাশবোর্ডের সব আয় ও পরিসংখ্যান ০ (Zero) হয়ে যাবে। কিন্তু আপনার সিস্টেম সেটিংস, এপিআই কি এবং স্টাইল কনফিগারেশন সম্পূর্ণ অক্ষত থাকবে। এই কাজ আর ফেরত আনা যাবে না।',
+    'RESET-TEST-DATA',
+    'হ্যাঁ, সব টেস্ট ডেটা রিসেট করুন',
+    function () {
+      busy(1, 'টেস্ট ডেটা রিসেট হচ্ছে…');
+      rpc('admin_reset_test_data').then(function (r) {
+        busy(0);
+        if (r && r.ok) {
+          toast(r.message || 'সব টেস্ট ডেটা সফলভাবে মুছে সিস্টেম ফ্রেশ করা হয়েছে ✓');
+          A.data.members = [];
+          A.members = [];
+          A.pays = [];
+          A.pending = 0;
+          nav('dash');
+        } else {
+          toast(r.err || 'রিসেট করা যায়নি', 1);
+        }
+      }).catch(function (e) {
+        busy(0);
+        toast('রিসেট ব্যর্থ হয়েছে: ' + (e.message || e), 1);
+      });
+    },
+    1
+  );
+}
 
 // --- ১৭. অ্যাক্টিভিটি ও অডিট লগ ---
 P.log = function () {

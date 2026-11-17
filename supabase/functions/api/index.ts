@@ -130,7 +130,8 @@ function formatPubMember(m: any) {
     daysLeft: paid ? left : 0,
     left: 0,
     verified: Boolean(m.verified),
-    hasPassword: Boolean(m.password_hash)
+    hasPassword: Boolean(m.password_hash),
+    brand_unlocked: Boolean(m.brand_unlocked)
   };
 }
 
@@ -148,7 +149,8 @@ function formatAdminMember(m: any) {
     made: Number(m.made) || 0,
     note: m.note || '',
     verified: Boolean(m.verified),
-    hasPassword: Boolean(m.password_hash)
+    hasPassword: Boolean(m.password_hash),
+    brand_unlocked: Boolean(m.brand_unlocked)
   };
 }
 
@@ -584,7 +586,12 @@ Deno.serve(async (req: Request) => {
       const pub = formatPubMember(member);
       if (!pub.paid) return json({ ok: false, err: 'আগে মেম্বারশিপ চালু করুন' });
 
-      const name = (member.brand || String(q.brand || '')).trim().slice(0, 40);
+      // ব্র্যান্ড লক চেক (যদি পূর্বে ব্র্যান্ড সেট করা থাকে এবং অ্যাডমিন আনলক না করে থাকে)
+      if (member.brand && !member.brand_unlocked) {
+        return json({ ok: false, err: 'আপনার ব্র্যান্ড তথ্য ইতোমধ্যে লক করা আছে। পরিবর্তনের জন্য অ্যাডমিনের সাথে যোগাযোগ করুন।' });
+      }
+
+      const name = (member.brand && !member.brand_unlocked ? member.brand : String(q.brand || member.brand || '')).trim().slice(0, 40);
       if (!name) return json({ ok: false, err: 'ব্র্যান্ডের নাম দিন' });
 
       const hex = (c: any) => {
@@ -629,15 +636,20 @@ Deno.serve(async (req: Request) => {
         c2: hex(q.c2),
         c3: hex(q.c3),
         shape: ['wide', 'square', 'tall'].includes(q.shape) ? q.shape : 'square',
-        logo_url: logoUrl
+        logo_url: logoUrl,
+        brand_unlocked: false
       };
 
-      const { data: updatedMem } = await supabase
+      const { data: updatedMem, error: upErr } = await supabase
         .from('members')
         .update(updateData)
         .eq('phone', phone)
         .select()
         .single();
+
+      if (upErr || !updatedMem) {
+        return json({ ok: false, err: (upErr && upErr.message) || 'ব্র্যান্ড সেভ করা যায়নি' });
+      }
 
       return json({ ok: true, member: formatPubMember(updatedMem) });
     }
@@ -881,6 +893,14 @@ Deno.serve(async (req: Request) => {
         const pendingCount = (payList || []).filter((p: any) => p.status === 'pending' || p.status === 'অপেক্ষায়').length;
         const totalRev = successPays.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
 
+        // চলতি মাসের হিসাব (Dhaka Time Month YYYY-MM)
+        const curMonthPrefix = today.slice(0, 7);
+        const curMonthPays = successPays.filter((p: any) => {
+          const rawDate = String(p.created_at || p.time || '');
+          return rawDate.slice(0, 7) === curMonthPrefix;
+        });
+        const monthRev = curMonthPays.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+
         const recent = (payList || []).slice(0, 6).map((p: any) => ({
           ...formatAdminPayment(p),
           brand: brandOf[p.phone] || ''
@@ -894,7 +914,7 @@ Deno.serve(async (req: Request) => {
           newWeek: newWeekCount,
           made: totalMade,
           pending: pendingCount,
-          revMonth: totalRev,
+          revMonth: monthRev,
           revTotal: totalRev,
           top: stList || [],
           recent
@@ -993,6 +1013,7 @@ Deno.serve(async (req: Request) => {
         if (s.shape !== undefined) updatePayload.shape = String(s.shape).trim();
         if (s.logo_url !== undefined) updatePayload.logo_url = String(s.logo_url).trim();
         if (s.verified !== undefined) updatePayload.verified = Boolean(s.verified);
+        if (s.brand_unlocked !== undefined) updatePayload.brand_unlocked = Boolean(s.brand_unlocked);
 
         const { error } = await supabase.from('members').update(updatePayload).eq('phone', mPhone);
         if (error) return json({ ok: false, err: error.message });
@@ -1004,6 +1025,17 @@ Deno.serve(async (req: Request) => {
         await logActivity(supabase, 'মেম্বার তথ্য আপডেট', `ফোন: ${mPhone} (${changeDesc.join(', ') || 'তথ্য সেভ'})`);
 
         return json({ ok: true });
+      }
+
+      // মেম্বারের ব্র্যান্ড এডিট আনলক/লক টগল
+      if (action === 'a_member_brand_unlock') {
+        const mPhone = normPhone(q.phone);
+        if (!mPhone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+        const unlock = Boolean(q.unlocked);
+        const { error } = await supabase.from('members').update({ brand_unlocked: unlock }).eq('phone', mPhone);
+        if (error) return json({ ok: false, err: error.message });
+        await logActivity(supabase, unlock ? 'ব্র্যান্ড এডিট আনলক করা হয়েছে' : 'ব্র্যান্ড এডিট লক করা হয়েছে', `ফোন: ${mPhone}`);
+        return json({ ok: true, brand_unlocked: unlock });
       }
 
       if (action === 'a_member_history') {
@@ -1044,6 +1076,37 @@ Deno.serve(async (req: Request) => {
         return json({ ok: true, verified: isV });
       }
 
+      // মেম্বার ও তাদের সম্পূর্ণ ডেটা ডিলিট (Cascade Delete)
+      if (action === 'a_member_del') {
+        const mPhone = normPhone(q.phone);
+        if (!mPhone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+
+        const { data: memRow } = await supabase.from('members').select('*').eq('phone', mPhone).single();
+        if (!memRow) return json({ ok: false, err: 'মেম্বার পাওয়া যায়নি' });
+
+        // ১. চাইল্ড রেকর্ডগুলো আগে মুছে ফেলা (FK Constraints সেফটি)
+        await supabase.from('payments').delete().eq('phone', mPhone);
+        await supabase.from('design_history').delete().eq('phone', mPhone);
+        await supabase.from('otp_codes').delete().eq('phone', mPhone);
+
+        // ২. ক্লাউডিনারি লোগো থাকলে মুছে ফেলা
+        if (memRow.logo_url && memRow.logo_url.includes('res.cloudinary.com')) {
+          try {
+            const { data: stList } = await supabase.from('settings').select('*');
+            const stMap: Record<string, string> = {};
+            (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+            await deleteFromCloudinary(memRow.logo_url, stMap);
+          } catch {}
+        }
+
+        // ৩. মেম্বার টেবিল থেকে রেকর্ড মুছে ফেলা
+        const { error: delErr } = await supabase.from('members').delete().eq('phone', mPhone);
+        if (delErr) return json({ ok: false, err: delErr.message });
+
+        await logActivity(supabase, 'মেম্বার অ্যাকাউন্ট মুছে ফেলা হয়েছে', `ফোন: ${mPhone}, ব্র্যান্ড: ${memRow.brand || '—'}`);
+        return json({ ok: true });
+      }
+
       if (action === 'a_payments') {
         const { data: list } = await supabase.from('payments').select('*').order('created_at', { ascending: false });
         return json({ ok: true, list: (list || []).map(formatAdminPayment) });
@@ -1052,6 +1115,21 @@ Deno.serve(async (req: Request) => {
       if (action === 'a_pay_check') {
         const res = await verifyPayment(supabase, q.id);
         return json(res);
+      }
+
+      // পেমেন্ট/অর্ডার রেকর্ড ডিলিট (ড্যাশবোর্ড আয় রিক্যালকুলেট হবে)
+      if (action === 'a_pay_del') {
+        const payId = String(q.id || '').trim();
+        if (!payId) return json({ ok: false, err: 'পেমেন্ট আইডি দিন' });
+
+        const { data: payRow } = await supabase.from('payments').select('*').eq('id', payId).single();
+        if (!payRow) return json({ ok: false, err: 'পেমেন্ট রেকর্ড পাওয়া যায়নি' });
+
+        const { error: delErr } = await supabase.from('payments').delete().eq('id', payId);
+        if (delErr) return json({ ok: false, err: delErr.message });
+
+        await logActivity(supabase, 'পেমেন্ট রেকর্ড মুছে ফেলা হয়েছে', `আইডি: ${payId}, ফোন: ${payRow.phone}, টাকা: ৳${payRow.amount}, স্ট্যাটাস: ${payRow.status}`);
+        return json({ ok: true });
       }
 
       if (action === 'a_data') {
@@ -1653,6 +1731,12 @@ Deno.serve(async (req: Request) => {
 
         await logActivity(supabase, 'ল্যান্ডিং পেজ কন্ট্রোল (CMS)', 'ল্যান্ডিং পেজের সেকশন ও কনটেন্ট পরিবর্তন করা হয়েছে');
         return json({ ok: true });
+      }
+
+      if (action === 'a_reset_test_data') {
+        const { data, error } = await supabase.rpc('admin_reset_test_data');
+        if (error) return json({ ok: false, err: error.message });
+        return json(data || { ok: true, message: 'সব টেস্ট ডেটা সফলভাবে মুছে সিস্টেম ফ্রেশ করা হয়েছে' });
       }
     }
 
