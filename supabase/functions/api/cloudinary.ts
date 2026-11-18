@@ -94,13 +94,35 @@ export function getCloudinaryConfig(overrideMap?: Record<string, string>): Cloud
   return { cloudName, apiKey, apiSecret, folder, ready };
 }
 
+function cleanPathSeg(p?: string): string {
+  return String(p || '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/[^a-zA-Z0-9/_-]/g, '_')
+    .replace(/\/+/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+}
+
+function makeCleanStem(fileName?: string): string {
+  const base = String(fileName || 'image')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48) || 'img';
+  const rand = Math.random().toString(36).slice(2, 7);
+  return /\d{10,}/.test(base) ? `${base}_${rand}` : `${base}_${Date.now()}_${rand}`;
+}
+
 /**
  * Cloudinary-তে ছবি আপলোড করে অপ্টিমাইজড লিঙ্ক প্রদান করে (বেস৬৪ ডাটা অথবা রিমোট ইমেজ লিঙ্ক)
+ * প্যারেন্ট ফোল্ডার ও সাবফোল্ডার (Dynamic + Fixed Folder উভয় মোডে) সাপোর্ট করে
  */
 export async function uploadToCloudinary(
   fileOrUrl: string,
   fileName: string = 'image.jpg',
-  overrideMap?: Record<string, string>
+  overrideMap?: Record<string, string>,
+  subfolder?: string
 ): Promise<CloudinaryUploadResult> {
   const cfg = getCloudinaryConfig(overrideMap);
 
@@ -111,7 +133,11 @@ export async function uploadToCloudinary(
     };
   }
 
-  const { cloudName, apiKey, apiSecret, folder } = cfg;
+  const { cloudName, apiKey, apiSecret } = cfg;
+  const rootFolder = cleanPathSeg(cfg.folder) || 'uddokta_graphics_ai';
+  const sub = cleanPathSeg(subfolder);
+  const targetFolder = sub ? `${rootFolder}/${sub}` : rootFolder;
+  const stem = makeCleanStem(fileName);
 
   // বেস৬৪ অথবা রিমোট ওয়েব URL হ্যান্ডলিং
   let fileToUpload = String(fileOrUrl || '').trim();
@@ -121,26 +147,45 @@ export async function uploadToCloudinary(
       : `data:image/jpeg;base64,${fileToUpload}`;
   }
 
-  const timestamp = Math.floor(Date.now() / 1000);
+  const doSignedUpload = async (useDynamicMode: boolean) => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const formData = new FormData();
+    formData.append('file', fileToUpload);
+    formData.append('api_key', apiKey);
+    formData.append('timestamp', String(timestamp));
 
-  // Cloudinary সিগনেচার স্ট্রিং তৈরি: অ্যালফাবেটিক্যাল অর্ডারে সাজানো
-  const toSign = `folder=${folder}&timestamp=${timestamp}${apiSecret}`;
-  const signature = await sha1(toSign);
+    let toSign = '';
+    if (useDynamicMode) {
+      // Dynamic Folder Mode (নতুন Cloudinary অ্যাকাউন্ট): asset_folder + full public_id
+      const fullPublicId = `${targetFolder}/${stem}`;
+      toSign = `asset_folder=${targetFolder}&public_id=${fullPublicId}&timestamp=${timestamp}${apiSecret}`;
+      formData.append('asset_folder', targetFolder);
+      formData.append('public_id', fullPublicId);
+    } else {
+      // Legacy Fixed Folder Mode ফলব্যাক
+      toSign = `folder=${targetFolder}&public_id=${stem}&timestamp=${timestamp}${apiSecret}`;
+      formData.append('folder', targetFolder);
+      formData.append('public_id', stem);
+    }
 
-  const formData = new FormData();
-  formData.append('file', fileToUpload);
-  formData.append('api_key', apiKey);
-  formData.append('timestamp', String(timestamp));
-  formData.append('signature', signature);
-  formData.append('folder', folder);
+    const signature = await sha1(toSign);
+    formData.append('signature', signature);
 
-  try {
     const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
       method: 'POST',
       body: formData
     });
-
     const json = await res.json();
+    return { res, json };
+  };
+
+  try {
+    let { res, json } = await doSignedUpload(true);
+
+    // পুরোনো Fixed Folder অ্যাকাউন্টে asset_folder রিজেক্ট করলে স্বয়ংক্রিয়ভাবে folder মোডে রিট্রাই
+    if ((!res.ok || json?.error) && /asset_folder/i.test(String(json?.error?.message || ''))) {
+      ({ res, json } = await doSignedUpload(false));
+    }
 
     if (!res.ok || json.error) {
       return {
@@ -150,8 +195,6 @@ export async function uploadToCloudinary(
     }
 
     // অটো কম্প্রেশন ও রেস্পন্সিভ ফরম্যাট ট্রান্সফর্মেশন যোগ করা
-    // secure_url: https://res.cloudinary.com/.../upload/v1234/folder/id.jpg
-    // transformed: https://res.cloudinary.com/.../upload/f_auto,q_auto/v1234/folder/id.jpg
     let optimizedUrl = json.secure_url;
     if (optimizedUrl.includes('/upload/')) {
       optimizedUrl = optimizedUrl.replace('/upload/', '/upload/f_auto,q_auto/');

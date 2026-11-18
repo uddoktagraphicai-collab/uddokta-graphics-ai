@@ -39,7 +39,25 @@ function fixImgs(obj) {
 }
 
 var APPNAME = (T('t9cece10c', 'উদ্যোক্তা গ্রাফিক্স AI'));
-var LOGO = 'images/logos/logo.png';
+var DEFAULT_LOGO = 'images/logos/logo.png';
+var DEFAULT_EPS_CHECKOUT = 'images/eps-checkout.png';
+var DEFAULT_EPS_FOOTER_DESKTOP = 'images/eps-footer-desktop.png';
+var DEFAULT_EPS_FOOTER_MOBILE = 'images/eps-footer-mobile.png';
+var LOGO = DEFAULT_LOGO;
+function applyAppBrandAssets(st) {
+  st = st || {};
+  var newLogo = String(st.site_logo || '').trim() || DEFAULT_LOGO;
+  LOGO = newLogo;
+  var fav = document.querySelector('link[rel="icon"]');
+  if (fav) fav.href = newLogo;
+  document.querySelectorAll('.brandmark img, .tlogo img').forEach(function (img) {
+    if (img.getAttribute('src') !== newLogo) img.src = newLogo;
+  });
+}
+try {
+  var _ba = JSON.parse(localStorage.getItem('ug_brand_assets') || 'null');
+  if (_ba) applyAppBrandAssets(_ba);
+} catch (e) {}
 
 var EYE_ICON = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 var EYE_OFF_ICON = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
@@ -217,7 +235,33 @@ function busy(on, text) {
   }
 }
 function toast(m, err) { var t = $('toast'); t.innerHTML = m; t.className = 'toast show' + (err ? ' err' : ''); clearTimeout(t._t); t._t = setTimeout(function () { t.className = 'toast'; }, err ? 5000 : 2400); }
-function fmtDate(s) { if (!s) return ''; var p = String(s).split('-'); if (p.length < 3) return esc(s); return BN(+p[2]) + ' ' + MON[+p[1] - 1] + ' ' + BN(p[0]); }
+var MON_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtDate(s) {
+  if (!s) return '';
+  var raw = String(s).trim();
+  var mDateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (mDateOnly) {
+    var mi = parseInt(mDateOnly[2], 10) - 1;
+    var dn = parseInt(mDateOnly[3], 10);
+    if (mi >= 0 && mi < 12) return String(dn).padStart(2, '0') + ' ' + MON_EN[mi] + ' ' + mDateOnly[1];
+  }
+  try {
+    var d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      var bd = new Date(d.getTime() + 6 * 3600000);
+      var day = String(bd.getUTCDate()).padStart(2, '0');
+      var mon = MON_EN[bd.getUTCMonth()];
+      var yr = bd.getUTCFullYear();
+      var h24 = bd.getUTCHours();
+      var ampm = h24 >= 12 ? 'PM' : 'AM';
+      var h12 = h24 % 12; if (h12 === 0) h12 = 12;
+      var hr = String(h12).padStart(2, '0');
+      var min = String(bd.getUTCMinutes()).padStart(2, '0');
+      return day + ' ' + mon + ' ' + yr + ', ' + hr + ':' + min + ' ' + ampm;
+    }
+  } catch (e) {}
+  return esc(raw);
+}
 function gl(s) { try { return Array.from(new Intl.Segmenter('bn', { granularity: 'grapheme' }).segment(s), function (x) { return x.segment; }); } catch (e) { return Array.from(s); } }
 function M() { return S.member || {}; }
 function paid() { return !!M().paid; }
@@ -731,16 +775,33 @@ function refreshPaySettings(silent) {
         String(S.c.settings.price || '') !== String(r.price) ||
         String(S.c.settings.days || '') !== String(r.days) ||
         String(S.c.settings.monthly || '') !== String(r.monthly) ||
-        String(S.c.settings.gateway_fee !== undefined ? S.c.settings.gateway_fee : '') !== String(r.gateway_fee)
+        String(S.c.settings.gateway_fee !== undefined ? S.c.settings.gateway_fee : '') !== String(r.gateway_fee) ||
+        String(S.c.settings.site_logo || '') !== String(r.site_logo || '') ||
+        String(S.c.settings.eps_checkout_banner || '') !== String(r.eps_checkout_banner || '') ||
+        String(S.c.settings.eps_footer_desktop || '') !== String(r.eps_footer_desktop || '') ||
+        String(S.c.settings.eps_footer_mobile || '') !== String(r.eps_footer_mobile || '')
       );
       S.c.settings.price = String(r.price);
       S.c.settings.monthly = String(r.monthly);
       S.c.settings.days = String(r.days);
       S.c.settings.gateway_fee = String(r.gateway_fee);
       S.c.settings.meta_pixel_id = String(r.meta_pixel_id || '');
+      S.c.settings.site_logo = String(r.site_logo || '');
+      S.c.settings.eps_checkout_banner = String(r.eps_checkout_banner || '');
+      S.c.settings.eps_footer_desktop = String(r.eps_footer_desktop || '');
+      S.c.settings.eps_footer_mobile = String(r.eps_footer_mobile || '');
       if (S.c.settings.meta_pixel_id) initMetaPixel(S.c.settings.meta_pixel_id);
-      try { LS.set('eds_c3', S.c); } catch (e) {}
-      if (!silent && changed && (CUR === 'member' || CUR === 'home' || CUR === 'paid')) {
+      applyAppBrandAssets(S.c.settings);
+      try {
+        LS.set('eds_c3', S.c);
+        localStorage.setItem('ug_brand_assets', JSON.stringify({
+          site_logo: S.c.settings.site_logo,
+          eps_checkout_banner: S.c.settings.eps_checkout_banner,
+          eps_footer_desktop: S.c.settings.eps_footer_desktop,
+          eps_footer_mobile: S.c.settings.eps_footer_mobile
+        }));
+      } catch (e) {}
+      if (!silent && changed && (CUR === 'member' || CUR === 'home' || CUR === 'paid' || CUR === 'login')) {
         rerender();
       }
     }
@@ -754,15 +815,18 @@ V.member = function () {
   var pc = payCalc();
   var feat = [(T('tfdb31ebe', 'সব স্টাইল খোলা')), (T('t7f56b9bd', 'যত খুশি ডিজাইনের কাস্টমাইজড কমান্ড')), (T('t237c40ea', 'ডিজাইন ঠিক করার রেডি লাইন')), (T('t5a04ad75', 'নতুন স্টাইল আসলে সাথে সাথে পাবেন'))];
   var waText = (T('t823bc87c', 'আসসালামু আলাইকুম, আমি') + ' ') + APPNAME + (T('tf4fc0064', '-এর মেম্বারশিপ নিতে চাই। আমার নম্বর:') + ' ') + (S.phone || '');
+  var epsCkImg = String(st.eps_checkout_banner || '').trim() || DEFAULT_EPS_CHECKOUT;
+  var epsFdImg = String(st.eps_footer_desktop || '').trim() || DEFAULT_EPS_FOOTER_DESKTOP;
+  var epsFmImg = String(st.eps_footer_mobile || '').trim() || String(st.eps_footer_desktop || '').trim() || DEFAULT_EPS_FOOTER_MOBILE;
   var pay = ('<a class="btn" onclick="doPay()" style="margin-top:22px">' + T('t1dd64f9d', 'পেমেন্ট করুন · ৳')) + BN(pc.base) + I.arr + '</a>' +
-    '<img class="epsck" src="images/eps-checkout.png" alt="Pay with EPS">' +
+    '<img class="epsck" src="' + esc(epsCkImg) + '" alt="Pay with EPS">' +
     ('<p class="paynote">' + T('te835d181', 'পেমেন্ট হলেই মেম্বারশিপ নিজে থেকে চালু হবে।') + (pc.fee > 0 ? '<span class="payfee-hint">অনলাইন পেমেন্ট গেটওয়ে চার্জ (' + BN(pc.pct) + '%) প্রযোজ্য।</span>' : '') + '</p>') +
     '<a class="wa-help" href="' + esc(wa(waText)) + '" target="_blank" rel="noopener"><i>' + I.wa + ('</i>' + T('t44d56f65', 'সমস্যা হলে WhatsApp-এ মেসেজ দিন') + '</a>');
   return wtop((T('tea80659b', 'মেম্বারশিপ'))) + '<div class="wmain">' + lback((T('tb2052257', 'ফিরে যান'))) + head((T('t05dd299b', 'পুরো বছরের ডিজাইন, *এক পেমেন্টে*', 'span')), (T('te8f6325d', 'সব স্টাইল খুলে যাবে, যত খুশি কাস্টমাইজড কমান্ড বানাতে পারবেন।'))) +
     ('<div class="mgrid"><div class="mcard"><h3>' + T('td7b944f3', 'বার্ষিক মেম্বারশিপ') + '</h3><div class="mprice">' + T('t667044e8', '৳')) + BN(pc.base) + ('<small> ' + T('te4e3d29a', '/ বছর') + '</small></div><div class="mper">' + T('tbfba3042', 'মাসে মাত্র') + ' <b>' + T('t667044e8', '৳')) + BN(st.monthly || Math.max(1, Math.round(pc.base / 12))) + ('</b> ' + T('t0df3de41', '· প্রতিদিন মাত্র *১ টাকা*', 'b') + '</div>') +
     '<ul class="feat">' + feat.map(function (f) { return '<li>' + I.chk + f + '</li>'; }).join('') + '</ul>' + pay + '</div>' +
     ('<div class="why"><h3>' + T('t6711ac3e', 'যা যা বানাতে পারবেন') + '</h3><p>') + ((c.cats || []).map(function (x) { return x.name; }).join(', ') || (T('tf859e237', 'প্রোডাক্ট, অফার, উৎসব'))) + ': ' + BN((c.tpls || []).length) + (T('tbd3fc74a', 'টা স্টাইল, নতুন আসছে নিয়মিত।') + '</p><div class="wsg">') + (c.tpls || []).filter(function (t) { return t.img; }).slice(0, 6).map(function (t) { return '<img src="' + esc(imgUrl(t.img)) + '" alt="">'; }).join('') + '</div></div></div>' +
-    '<picture class="epsft"><source media="(min-width:900px)" srcset="images/eps-footer-desktop.png"><img src="images/eps-footer-mobile.png" alt="Pay with Visa, Mastercard, bKash, Nagad, Rocket and more — verified by EPS"></picture></div>';
+    '<picture class="epsft"><source media="(min-width:900px)" srcset="' + esc(epsFdImg) + '"><img src="' + esc(epsFmImg) + '" alt="Pay with Visa, Mastercard, bKash, Nagad, Rocket and more — verified by EPS"></picture></div>';
 };
 AFTER.member = function () {
   refreshPaySettings(false).then(function (pc) {
@@ -1143,13 +1207,72 @@ function clearAllHistory() {
     toast(errMsg(e), 1);
   });
 }
+function sanitizePolicyHtml(raw) {
+  var ALLOWED = { P: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, B: 1, EM: 1, I: 1, U: 1, BR: 1, BLOCKQUOTE: 1, HR: 1, A: 1, DIV: 1, SPAN: 1 };
+  var box = document.createElement('div');
+  box.innerHTML = String(raw || '');
+  function cleanNode(node) {
+    if (node.nodeType === 3) return document.createTextNode(node.nodeValue || '');
+    if (node.nodeType !== 1) return null;
+    var tag = node.tagName.toUpperCase();
+    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'IFRAME' || tag === 'OBJECT') return null;
+    if (!ALLOWED[tag]) {
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var ch = cleanNode(node.childNodes[i]);
+        if (ch) frag.appendChild(ch);
+      }
+      return frag;
+    }
+    var el = document.createElement(tag === 'DIV' ? 'p' : tag.toLowerCase());
+    if (tag === 'A') {
+      var href = String(node.getAttribute('href') || '').trim();
+      if (/^(https?:\/\/|mailto:|tel:)/i.test(href)) {
+        el.setAttribute('href', href);
+        el.setAttribute('target', '_blank');
+        el.setAttribute('rel', 'noopener noreferrer');
+      }
+    }
+    for (var j = 0; j < node.childNodes.length; j++) {
+      var c2 = cleanNode(node.childNodes[j]);
+      if (c2) el.appendChild(c2);
+    }
+    return el;
+  }
+  var out = document.createElement('div');
+  for (var k = 0; k < box.childNodes.length; k++) {
+    var cn = cleanNode(box.childNodes[k]);
+    if (cn) out.appendChild(cn);
+  }
+  return out.innerHTML;
+}
+function renderPolicyHtml(raw) {
+  var s = String(raw || '').trim();
+  if (!s) return '<p class="empty">' + T('ted3b57ef', 'শীঘ্রই আসছে') + '</p>';
+  if (/<(p|h2|h3|ul|ol|li|strong|b|em|i|u|br|blockquote|hr|a|div)\b/i.test(s)) {
+    return sanitizePolicyHtml(s);
+  }
+  return s.split(/\n\s*\n/).map(function (t) { return '<p>' + esc(t).replace(/\n/g, '<br>') + '</p>'; }).join('');
+}
 function openPolicy(k) { S.policy = k; go('policy'); }
 V.policy = function () {
   var P = (S.c && S.c.policies) || [], p = P.filter(function (x) { return x.key === S.policy; })[0] || P[0];
   if (!p) return wtop((T('t05e84ffe', 'পলিসি'))) + ('<div class="wmain"><p class="empty">' + T('ted3b57ef', 'শীঘ্রই আসছে') + '</p></div>');
   return wtop(esc(p.title)) + '<div class="wmain">' + lback((T('tb2052257', 'ফিরে যান'))) + head(esc(p.title), '') +
     '<div class="ptabs">' + P.map(function (x) { return '<span class="chip' + (x.key === p.key ? ' on' : '') + '" onclick="S.policy=\'' + esc(x.key) + '\';rerender()">' + esc(x.title) + '</span>'; }).join('') + '</div>' +
-    '<div class="doc">' + String(p.text || '').split(/\n\s*\n/).map(function (t) { return '<p>' + esc(t).replace(/\n/g, '<br>') + '</p>'; }).join('') + '</div></div>';
+    '<div class="doc">' + renderPolicyHtml(p.text) + '</div></div>';
+};
+AFTER.policy = function () {
+  rpc('get_public_policies').then(function (r) {
+    if (r && r.ok && Array.isArray(r.policies)) {
+      if (!S.c) S.c = {};
+      var prev = JSON.stringify(S.c.policies || []);
+      var next = JSON.stringify(r.policies);
+      S.c.policies = r.policies;
+      try { LS.set('eds_c3', S.c); } catch (e) {}
+      if (CUR === 'policy' && prev !== next) rerender();
+    }
+  }).catch(function () {});
 };
 V.logout = function () { return V.acct(); };
 AFTER.logout = function () {
@@ -1204,9 +1327,23 @@ function boot() {
     go(start); if (entry === 'checkout') nav('member');
   }
   refreshPaySettings(false);
+  rpc('get_public_app_texts').then(function (tr) {
+    if (tr && tr.ok && tr.texts) {
+      TX = tr.texts;
+      APPNAME = T('t9cece10c', 'উদ্যোক্তা গ্রাফিক্স AI');
+      if (S.c) {
+        S.c.texts = tr.texts;
+        try { LS.set('eds_c3', S.c); } catch (e) {}
+      }
+      if (CUR && ['home', 'style', 'guide', 'member', 'login', 'acct', 'setup', 'write', 'ready', 'fix'].indexOf(CUR) > -1) rerender();
+    }
+  }).catch(function () {});
   api('content').then(function (r) {
     if (!r.ok) return toast((T('t9cfa3898', 'সার্ভার:') + ' ') + (r.err || (T('t63de2ba5', 'কন্টেন্ট আসেনি'))), 1);
-    var first = !S.c; r = fixImgs(r); S.c = r; TX = r.texts || {}; LS.set('eds_c3', r); if (first && !CUR) { go(start); if (entry === 'checkout') nav('member'); } else if (['home', 'style', 'guide', 'member', 'login', 'acct'].indexOf(CUR) > -1) rerender();
+    var first = !S.c; r = fixImgs(r);
+    if (TX && Object.keys(TX).length) r.texts = Object.assign({}, r.texts || {}, TX);
+    S.c = r; TX = r.texts || {}; APPNAME = T('t9cece10c', 'উদ্যোক্তা গ্রাফিক্স AI');
+    LS.set('eds_c3', r); if (first && !CUR) { go(start); if (entry === 'checkout') nav('member'); } else if (['home', 'style', 'guide', 'member', 'login', 'acct'].indexOf(CUR) > -1) rerender();
     refreshPaySettings(false);
   }).catch(function (e) { if (!S.c) go('off'); else toast(errMsg(e), 1); });
   if (S.phone && S.tok) {

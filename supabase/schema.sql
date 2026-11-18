@@ -200,15 +200,15 @@ as $$
 declare
   v_rec record;
 begin
-  select phone, verified, (password_hash is not null and password_hash <> '') as has_password
+  select phone, verified, (password_hash is not null and password_hash <> '') as has_password, coalesce(brand_unlocked, false) as brand_unlocked, last_seen
   into v_rec
   from members
   where phone = p_phone;
   
   if not found then
-    return json_build_object('exists', false, 'verified', false, 'has_password', false);
+    return json_build_object('exists', false, 'verified', false, 'has_password', false, 'brand_unlocked', false, 'last_seen', null);
   else
-    return json_build_object('exists', true, 'verified', coalesce(v_rec.verified, false), 'has_password', coalesce(v_rec.has_password, false));
+    return json_build_object('exists', true, 'verified', coalesce(v_rec.verified, false), 'has_password', coalesce(v_rec.has_password, false), 'brand_unlocked', coalesce(v_rec.brand_unlocked, false), 'last_seen', v_rec.last_seen);
   end if;
 end;
 $$;
@@ -577,12 +577,20 @@ declare
   v_days text;
   v_fee text;
   v_pixel text;
+  v_logo text;
+  v_eps_ck text;
+  v_eps_fd text;
+  v_eps_fm text;
 begin
   select value into v_price from settings where key = 'price';
   select value into v_monthly from settings where key = 'monthly';
   select value into v_days from settings where key = 'days';
   select value into v_fee from settings where key = 'gateway_fee';
   select value into v_pixel from settings where key = 'meta_pixel_id';
+  select value into v_logo from settings where key = 'site_logo';
+  select value into v_eps_ck from settings where key = 'eps_checkout_banner';
+  select value into v_eps_fd from settings where key = 'eps_footer_desktop';
+  select value into v_eps_fm from settings where key = 'eps_footer_mobile';
 
   return json_build_object(
     'ok', true,
@@ -590,7 +598,11 @@ begin
     'monthly', coalesce(nullif(trim(v_monthly), ''), '33'),
     'days', coalesce(nullif(trim(v_days), ''), '365'),
     'gateway_fee', coalesce(nullif(trim(v_fee), ''), '0'),
-    'meta_pixel_id', coalesce(trim(v_pixel), '')
+    'meta_pixel_id', coalesce(trim(v_pixel), ''),
+    'site_logo', coalesce(trim(v_logo), ''),
+    'eps_checkout_banner', coalesce(trim(v_eps_ck), ''),
+    'eps_footer_desktop', coalesce(trim(v_eps_fd), ''),
+    'eps_footer_mobile', coalesce(trim(v_eps_fm), '')
   );
 end;
 $$;
@@ -1410,7 +1422,7 @@ returns jsonb language plpgsql security definer as $$
 declare v_res jsonb;
 begin
   if not public.is_valid_admin_token(p_tok) then return jsonb_build_object('ok', false, 'auth', false, 'err', 'অ্যাডমিন সেশন বৈধ নয়'); end if;
-  select coalesce(jsonb_object_agg(phone, jsonb_build_object('verified', coalesce(verified, false), 'has_password', (password_hash is not null and password_hash <> ''), 'brand_unlocked', coalesce(brand_unlocked, false))), '{}'::jsonb) into v_res from public.members;
+  select coalesce(jsonb_object_agg(phone, jsonb_build_object('verified', coalesce(verified, false), 'has_password', (password_hash is not null and password_hash <> ''), 'brand_unlocked', coalesce(brand_unlocked, false), 'last_seen', last_seen)), '{}'::jsonb) into v_res from public.members;
   return v_res;
 end; $$;
 
@@ -1522,3 +1534,76 @@ grant execute on function public.admin_get_withdrawals(text) to anon, authentica
 grant execute on function public.admin_add_withdrawal(text, numeric, text, text, text, text, text) to anon, authenticated, service_role;
 grant execute on function public.admin_delete_withdrawal(text, text) to anon, authenticated, service_role;
 grant execute on function public.admin_reset_test_data(text) to anon, authenticated, service_role;
+
+-- ২৩. নিরাপদ অ্যাপ টেক্সট সেভ (শুধু পরিবর্তিত কী upsert/delete, ল্যান্ডিং L-কী অক্ষত থাকবে)
+create or replace function public.admin_save_app_texts(p_tok text, p_rows jsonb)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_item jsonb;
+  v_key text;
+  v_val text;
+  v_del boolean;
+  v_upd int := 0;
+  v_rem int := 0;
+begin
+  if not public.is_valid_admin_token(p_tok) then
+    return jsonb_build_object('ok', false, 'auth', false, 'err', 'অ্যাডমিন সেশন বৈধ নয়');
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+    return jsonb_build_object('ok', false, 'err', 'সঠিক টেক্সট ডেটা পাওয়া যায়নি');
+  end if;
+  for v_item in select * from jsonb_array_elements(p_rows) loop
+    v_key := trim(coalesce(v_item->>'key', ''));
+    v_val := trim(coalesce(v_item->>'value', ''));
+    v_del := coalesce((v_item->>'del')::boolean, false);
+    if v_key = '' or left(v_key, 1) = 'L' then continue; end if;
+    if v_del or v_val = '' then
+      delete from public.texts where key = v_key;
+      v_rem := v_rem + 1;
+    else
+      insert into public.texts(key, value) values (v_key, v_val)
+      on conflict (key) do update set value = excluded.value;
+      v_upd := v_upd + 1;
+    end if;
+  end loop;
+  insert into public.log(who, action, detail, at)
+  values ('admin', 'অ্যাপের লেখা আপডেট', format('%sটি লেখা আপডেট, %sটি ডিফল্টে ফেরানো হয়েছে', v_upd, v_rem), now());
+  return jsonb_build_object('ok', true, 'updated', v_upd, 'deleted', v_rem);
+end;
+$$;
+
+create or replace function public.get_public_app_texts()
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare v_map jsonb;
+begin
+  select coalesce(jsonb_object_agg(key, value), '{}'::jsonb)
+  into v_map
+  from public.texts
+  where key is not null and left(key, 1) <> 'L' and coalesce(trim(value), '') <> '';
+  return jsonb_build_object('ok', true, 'texts', v_map);
+end;
+$$;
+
+grant execute on function public.admin_save_app_texts(text, jsonb) to anon, authenticated, service_role;
+grant execute on function public.get_public_app_texts() to anon, authenticated, service_role;
+
+create or replace function public.get_public_policies()
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare v_list jsonb;
+begin
+  select coalesce(jsonb_agg(row_to_json(t)), '[]'::jsonb)
+  into v_list
+  from (select key, title, text, sort from public.policies order by sort asc, key asc) t;
+  return jsonb_build_object('ok', true, 'policies', v_list);
+end;
+$$;
+grant execute on function public.get_public_policies() to anon, authenticated, service_role;

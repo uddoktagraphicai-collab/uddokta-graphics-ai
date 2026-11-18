@@ -145,7 +145,7 @@ function formatAdminMember(m: any) {
     ...pub,
     status: bnStatus,
     joined: m.joined || '',
-    last: m.last_seen ? String(m.last_seen).slice(0, 10) : (m.last || ''),
+    last: m.last_seen ? String(m.last_seen) : (m.last || ''),
     made: Number(m.made) || 0,
     note: m.note || '',
     verified: Boolean(m.verified),
@@ -676,6 +676,8 @@ Deno.serve(async (req: Request) => {
       };
 
       let logoUrl = member.logo_url || '';
+      const prevLogoUrl = member.logo_url || '';
+      let stMapForLogo: Record<string, string> | null = null;
       if (q.logo !== undefined && typeof q.logo === 'string') {
         const rawLogo = q.logo.trim();
         if (rawLogo.startsWith('http://') || rawLogo.startsWith('https://')) {
@@ -683,13 +685,16 @@ Deno.serve(async (req: Request) => {
         } else if (rawLogo.startsWith('data:image/')) {
           try {
             const { data: stList } = await supabase.from('settings').select('*');
-            const stMap: Record<string, string> = {};
-            (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
-            const cldCfg = getCloudinaryConfig(stMap);
+            stMapForLogo = {};
+            (stList || []).forEach((r: any) => (stMapForLogo![r.key] = r.value));
+            const cldCfg = getCloudinaryConfig(stMapForLogo);
             if (cldCfg.cloudName && cldCfg.apiKey && cldCfg.apiSecret) {
-              const upRes = await uploadToCloudinary(rawLogo, `logo_${phone}_${Date.now()}.png`, stMap);
+              const upRes = await uploadToCloudinary(rawLogo, `logo_${phone}_${Date.now()}.png`, stMapForLogo, 'member_logos');
               if (upRes.ok && upRes.url) {
                 logoUrl = upRes.url;
+                if (prevLogoUrl && prevLogoUrl !== logoUrl && prevLogoUrl.includes('res.cloudinary.com')) {
+                  try { await deleteFromCloudinary(prevLogoUrl, stMapForLogo); } catch {}
+                }
               } else {
                 logoUrl = rawLogo;
               }
@@ -701,6 +706,16 @@ Deno.serve(async (req: Request) => {
           }
         } else if (rawLogo === 'clear' || rawLogo === 'delete') {
           logoUrl = '';
+          if (prevLogoUrl && prevLogoUrl.includes('res.cloudinary.com')) {
+            try {
+              if (!stMapForLogo) {
+                const { data: stList } = await supabase.from('settings').select('*');
+                stMapForLogo = {};
+                (stList || []).forEach((r: any) => (stMapForLogo![r.key] = r.value));
+              }
+              await deleteFromCloudinary(prevLogoUrl, stMapForLogo);
+            } catch {}
+          }
         }
       }
 
@@ -1097,7 +1112,7 @@ Deno.serve(async (req: Request) => {
         });
       }
 
-      // Cloudinary ইমেজ আপলোড (বেস৬৪ ডাটা অথবা রিমোট ইমেজ লিঙ্ক)
+      // Cloudinary ইমেজ আপলোড (বেস৬৪ ডাটা অথবা রিমোট ইমেজ লিঙ্ক + সাবফোল্ডার + পুরোনো ছবি অটো-ডিলিট)
       if (action === 'a_upload') {
         const { data: stListForUpload } = await supabase.from('settings').select('*');
         const stMapForUpload: Record<string, string> = {};
@@ -1106,9 +1121,14 @@ Deno.serve(async (req: Request) => {
         if (!fileOrUrl) {
           return json({ ok: false, err: 'কোনো ইমেজ ফাইল বা URL দেওয়া হয়নি' });
         }
-        const uploadRes = await uploadToCloudinary(fileOrUrl, q.name || 'image.jpg', stMapForUpload);
+        const subfolder = String(q.subfolder || q.folder || '').trim();
+        const uploadRes = await uploadToCloudinary(fileOrUrl, q.name || 'image.jpg', stMapForUpload, subfolder);
         if (!uploadRes.ok) {
           return json({ ok: false, err: uploadRes.error });
+        }
+        const oldUrl = String(q.oldUrl || '').trim();
+        if (oldUrl && oldUrl !== uploadRes.url && oldUrl.includes('res.cloudinary.com')) {
+          try { await deleteFromCloudinary(oldUrl, stMapForUpload); } catch {}
         }
         return json({ ok: true, url: uploadRes.url, id: uploadRes.publicId });
       }
@@ -1533,27 +1553,53 @@ Deno.serve(async (req: Request) => {
         const rows = q.rows || [];
 
         if (tab === 'settings') {
+          const brandAssetKeys = new Set(['site_logo', 'eps_checkout_banner', 'eps_footer_desktop', 'eps_footer_mobile']);
+          const hasBrandAssetUpdate = rows.some((r: any) => r && brandAssetKeys.has(String(r.key || '')));
+          let prevSettingsMap: Record<string, string> = {};
+          if (hasBrandAssetUpdate) {
+            const { data: stList } = await supabase.from('settings').select('*');
+            (stList || []).forEach((s: any) => { prevSettingsMap[s.key] = s.value || ''; });
+          }
+
           for (const r of rows) {
             if (r.key) {
               await supabase.from('settings').upsert({ key: r.key, value: r.value || '' });
             }
           }
+
+          // অ্যাপ লোগো বা EPS ব্যানার রিসেট/পরিবর্তন করলে আগের Cloudinary ছবিটি স্বয়ংক্রিয়ভাবে মুছে ফেলা
+          if (hasBrandAssetUpdate) {
+            for (const r of rows) {
+              const k = String(r?.key || '');
+              if (!brandAssetKeys.has(k)) continue;
+              const prevUrl = String(prevSettingsMap[k] || '').trim();
+              const nextUrl = String(r?.value || '').trim();
+              if (prevUrl && prevUrl !== nextUrl && prevUrl.includes('res.cloudinary.com')) {
+                try { await deleteFromCloudinary(prevUrl, prevSettingsMap); } catch {}
+              }
+            }
+          }
+
           await logActivity(supabase, 'সিস্টেম সেটিংস পরিবর্তন', `${rows.length}টি সেটিংস সেভ করা হয়েছে`);
           return json({ ok: true });
         }
 
         if (tab === 'texts') {
-          await supabase.from('texts').delete().neq('key', '___none___');
           const cleanRows = rows
-            .filter((r: any) => r && r.key && String(r.value || '').trim())
-            .map((r: any) => ({ key: r.key, value: String(r.value).trim() }));
-          if (cleanRows.length > 0) {
-            for (let i = 0; i < cleanRows.length; i += 100) {
-              const chunk = cleanRows.slice(i, i + 100);
-              await supabase.from('texts').insert(chunk);
+            .filter((r: any) => r && r.key && !String(r.key).startsWith('L'))
+            .map((r: any) => ({ key: String(r.key).trim(), value: String(r.value || '').trim() }));
+          const toUpsert = cleanRows.filter((r: any) => r.value !== '');
+          const toDelete = cleanRows.filter((r: any) => r.value === '').map((r: any) => r.key);
+          if (toDelete.length > 0) {
+            await supabase.from('texts').delete().in('key', toDelete);
+          }
+          if (toUpsert.length > 0) {
+            for (let i = 0; i < toUpsert.length; i += 100) {
+              const chunk = toUpsert.slice(i, i + 100);
+              await supabase.from('texts').upsert(chunk, { onConflict: 'key' });
             }
           }
-          await logActivity(supabase, 'অ্যাপ ও ল্যান্ডিং টেক্সট আপডেট', `${cleanRows.length}টি টেক্সট সেভ করা হয়েছে`);
+          await logActivity(supabase, 'অ্যাপের লেখা আপডেট', `${toUpsert.length}টি লেখা আপডেট করা হয়েছে`);
           return json({ ok: true });
         }
 
@@ -1650,7 +1696,7 @@ Deno.serve(async (req: Request) => {
               const stMap: Record<string, string> = {};
               (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
               for (const imgUrl of removedImgs) {
-                deleteFromCloudinary(imgUrl, stMap).catch(() => {});
+                try { await deleteFromCloudinary(imgUrl, stMap); } catch {}
               }
             }
           }
@@ -1734,7 +1780,7 @@ Deno.serve(async (req: Request) => {
           const { data: stList } = await supabase.from('settings').select('*');
           const stMap: Record<string, string> = {};
           (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
-          deleteFromCloudinary(oldImg, stMap).catch(() => {});
+          try { await deleteFromCloudinary(oldImg, stMap); } catch {}
         }
 
         await logActivity(supabase, 'ডিজাইন স্টাইল সেভ', `স্টাইল: ${st.name || id} (ক্যাটাগরি: ${st.cat || 'সাধারণ'}, স্ট্যাটাস: ${mappedStatus})`);
@@ -1751,7 +1797,7 @@ Deno.serve(async (req: Request) => {
           const { data: stList } = await supabase.from('settings').select('*');
           const stMap: Record<string, string> = {};
           (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
-          deleteFromCloudinary(styleToDelete.img, stMap).catch(() => {});
+          try { await deleteFromCloudinary(styleToDelete.img, stMap); } catch {}
         }
 
         await logActivity(supabase, 'ডিজাইন স্টাইল মুছে ফেলা', `স্টাইল আইডি: ${q.id}`);
@@ -1775,7 +1821,7 @@ Deno.serve(async (req: Request) => {
             (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
             for (const item of stylesToDelete) {
               if (item.img) {
-                deleteFromCloudinary(item.img, stMap).catch(() => {});
+                try { await deleteFromCloudinary(item.img, stMap); } catch {}
               }
             }
           }
@@ -1918,9 +1964,12 @@ Deno.serve(async (req: Request) => {
         if (!cldCfg.ready) return json({ ok: false, err: 'আগে Cloud Name, API Key ও Secret পূরণ করুন' });
 
         const testBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
-        const res = await uploadToCloudinary(testBase64, 'test-connection.png', stMap);
+        const res = await uploadToCloudinary(testBase64, 'test_connection.png', stMap, '_test');
         if (!res.ok) {
           return json({ ok: false, err: res.error || 'Cloudinary আপলোড ব্যর্থ হয়েছে' });
+        }
+        if (res.publicId) {
+          try { await deleteFromCloudinary(res.publicId, stMap); } catch {}
         }
         return json({ ok: true, url: res.url });
       }

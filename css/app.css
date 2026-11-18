@@ -351,10 +351,18 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
 .acgrid{margin-top:22px}
 
 /* পলিসি */
-.doc{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px}
-.doc p{font-size:15px;color:var(--ink2);line-height:1.75}
-.doc p+p{margin-top:14px}
-.doc h3{font-size:16px;margin:18px 0 6px}
+.doc{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;color:var(--ink2);font-size:15px;line-height:1.8}
+.doc p{font-size:15px;color:var(--ink2);line-height:1.8;margin:0 0 12px}
+.doc p:last-child{margin-bottom:0}
+.doc h2{font-size:19px;font-weight:700;color:var(--ink);margin:22px 0 8px;line-height:1.35}
+.doc h2:first-child,.doc h3:first-child{margin-top:0}
+.doc h3{font-size:16.5px;font-weight:700;color:var(--ink);margin:18px 0 6px;line-height:1.4}
+.doc strong,.doc b{color:var(--ink);font-weight:700}
+.doc ul,.doc ol{margin:8px 0 14px 22px;display:grid;gap:6px}
+.doc li{color:var(--ink2);line-height:1.7}
+.doc blockquote{margin:14px 0;padding:12px 16px;border-left:3px solid var(--or);background:rgba(243,146,0,.06);border-radius:0 8px 8px 0;color:var(--ink)}
+.doc hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+.doc a{color:var(--or);text-decoration:underline;text-underline-offset:3px}
 .ptabs{display:flex;gap:8px;margin-top:18px;overflow-x:auto}
 
 /* শিট / পপআপ */

@@ -318,9 +318,30 @@ function initLandingMetaPixel(pid) {
     window.fbq('track', 'PageView');
   } catch (e) {}
 }
+function applyLandingBrandAssets(d) {
+  if (!d) return;
+  var logo = String(d.site_logo || '').trim();
+  var fd = String(d.eps_footer_desktop || '').trim();
+  var fm = String(d.eps_footer_mobile || '').trim();
+  if (logo) {
+    document.querySelectorAll('a.lg img').forEach(function (img) { img.src = logo; });
+    var fav = document.querySelector('link[rel="icon"]');
+    if (fav) fav.href = logo;
+  }
+  if (fd) {
+    var src = document.querySelector('.epsf picture source');
+    if (src) src.setAttribute('srcset', fd);
+  }
+  if (fm || fd) {
+    var fimg = document.querySelector('.epsf picture img');
+    if (fimg) fimg.src = fm || fd;
+  }
+}
 try {
   var _cachedPid = localStorage.getItem('ug_meta_pixel_id') || '';
   if (_cachedPid) initLandingMetaPixel(_cachedPid);
+  var _cachedAssets = JSON.parse(localStorage.getItem('ug_brand_assets') || 'null');
+  if (_cachedAssets) applyLandingBrandAssets(_cachedAssets);
 } catch (e) {}
 fetch('https://jfrpvijkfcsfewtljnah.supabase.co/rest/v1/rpc/get_public_pay_settings', {
   method: 'POST',
@@ -329,8 +350,18 @@ fetch('https://jfrpvijkfcsfewtljnah.supabase.co/rest/v1/rpc/get_public_pay_setti
 }).then(function (r) { return r.json(); }).then(function (d) {
   if (d && d.ok) {
     var pid = String(d.meta_pixel_id || '').trim();
-    try { localStorage.setItem('ug_meta_pixel_id', pid); } catch (e) {}
+    var assets = {
+      site_logo: String(d.site_logo || '').trim(),
+      eps_checkout_banner: String(d.eps_checkout_banner || '').trim(),
+      eps_footer_desktop: String(d.eps_footer_desktop || '').trim(),
+      eps_footer_mobile: String(d.eps_footer_mobile || '').trim()
+    };
+    try {
+      localStorage.setItem('ug_meta_pixel_id', pid);
+      localStorage.setItem('ug_brand_assets', JSON.stringify(assets));
+    } catch (e) {}
     if (pid) initLandingMetaPixel(pid);
+    applyLandingBrandAssets(assets);
   }
 }).catch(function () {});
 document.addEventListener('click', function (e) {

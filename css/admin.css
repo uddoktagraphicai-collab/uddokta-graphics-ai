@@ -1122,6 +1122,79 @@ span.st.m{color:var(--mut);border-color:var(--line);background:var(--card2)}
 .w-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:34px 16px;text-align:center}
 .w-empty p{font-size:14.5px;color:var(--mut);margin:0}
 
+/* --- অ্যাপ লোগো ও পেমেন্ট ব্যানার ম্যানেজার --- */
+.asset-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.asset-card{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.asset-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.asset-head b{display:block;font-size:14px;color:var(--ink);line-height:1.3}
+.asset-head small{display:block;font-size:11.5px;color:var(--mut);margin-top:2px}
+.asset-btns{display:flex;align-items:center;gap:6px;flex:none}
+.asset-prev{height:76px;border-radius:8px;background:rgba(255,255,255,.04);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;padding:8px;overflow:hidden}
+.asset-prev img{max-width:100%;max-height:100%;object-fit:contain;border-radius:4px}
+.asset-prev.sq img{max-height:58px}
+@media(max-width:720px){
+  .asset-grid{grid-template-columns:1fr}
+}
+
+/* --- অ্যাপের সব লেখা: সহজ ও অ্যাডভান্সড কন্ট্রোল --- */
+.tx-topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.tx-modes{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:4px;gap:4px}
+.tx-mbtn{border:0;background:transparent;color:var(--mut);font:inherit;font-size:13.5px;font-weight:600;padding:8px 14px;border-radius:7px;cursor:pointer;transition:background .15s ease,color .15s ease}
+.tx-mbtn:hover{color:var(--ink)}
+.tx-mbtn.on{background:var(--or);color:#16110A}
+.tx-wrap{padding-bottom:84px}
+.tx-card{padding:20px 22px 22px}
+.tx-card-head{margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.tx-card-head h3{margin:0;font-size:17px}
+.tx-card-head p{margin:3px 0 0;font-size:13px;color:var(--mut)}
+.tx-fields{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.tx-field{background:var(--bg2);border:1px solid var(--line);border-radius:11px;padding:13px 14px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s ease}
+.tx-field.on{border-color:rgba(243,146,0,.55);background:rgba(243,146,0,.03)}
+.tx-fl-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.tx-fl-top b{font-size:14px;color:var(--ink);font-weight:600}
+.tx-fl-top small{display:block;font-size:11.5px;color:var(--mut);margin-top:2px}
+.tx-tag{display:inline-block;margin-left:6px;font-size:11px;font-weight:600;color:var(--or);background:rgba(243,146,0,.12);border:1px solid rgba(243,146,0,.3);border-radius:5px;padding:0 6px;vertical-align:middle}
+.tx-hl-prev{font-size:12.5px;color:var(--ink2);background:rgba(255,255,255,.025);border:1px dashed var(--line);border-radius:7px;padding:6px 10px;line-height:1.45}
+.tx-field .tx{min-height:74px}
+@media(max-width:860px){
+  .tx-fields{grid-template-columns:1fr}
+}
+
+/* --- পলিসি রিচ-টেক্সট ডকুমেন্ট এডিটর ও লাইভ প্রিভিউ --- */
+.pol-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.pol-add-chip{border-style:dashed !important;color:var(--or) !important;border-color:rgba(243,146,0,.45) !important}
+.pol-meta{margin-bottom:14px;padding:16px 18px !important}
+.pol-meta-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.pol-meta-acts .btn.sm{height:34px;padding:0 12px;font-size:13px}
+.rte-split{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;align-items:start}
+.rte-box{padding:0 !important;overflow:hidden}
+.rte-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:10px 12px;background:var(--bg2);border-bottom:1px solid var(--line)}
+.rte-btn{height:30px;padding:0 9px;border-radius:6px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--ink2);font:inherit;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .14s ease,color .14s ease,border-color .14s ease}
+.rte-btn:hover{background:rgba(243,146,0,.12);border-color:rgba(243,146,0,.45);color:var(--ink)}
+.rte-sep{width:1px;height:18px;background:var(--line);margin:0 3px}
+.rte-area{min-height:360px;max-height:620px;overflow-y:auto;padding:18px 20px;color:var(--ink2);font-size:14.5px;line-height:1.8;outline:none}
+.rte-area:focus{box-shadow:inset 0 0 0 2px rgba(243,146,0,.22)}
+.rte-area h2,.doc-prev h2{font-size:18.5px;font-weight:700;color:var(--ink);margin:18px 0 8px;line-height:1.35}
+.rte-area h2:first-child,.rte-area h3:first-child,.doc-prev h2:first-child,.doc-prev h3:first-child{margin-top:0}
+.rte-area h3,.doc-prev h3{font-size:16px;font-weight:700;color:var(--ink);margin:14px 0 6px}
+.rte-area p,.doc-prev p{margin:0 0 11px;color:var(--ink2);line-height:1.8}
+.rte-area strong,.rte-area b,.doc-prev strong,.doc-prev b{color:var(--ink);font-weight:700}
+.rte-area ul,.rte-area ol,.doc-prev ul,.doc-prev ol{margin:8px 0 12px 22px;display:grid;gap:5px}
+.rte-area blockquote,.doc-prev blockquote{margin:12px 0;padding:10px 14px;border-left:3px solid var(--or);background:rgba(243,146,0,.07);border-radius:0 8px 8px 0;color:var(--ink)}
+.rte-area hr,.doc-prev hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.rte-area a,.doc-prev a{color:var(--or);text-decoration:underline;text-underline-offset:3px}
+.rte-prev-box{padding:0 !important;overflow:hidden}
+.rte-prev-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:var(--bg2);border-bottom:1px solid var(--line)}
+.rte-prev-head small{color:var(--mut);font-size:12px}
+.rte-prev-canvas{padding:18px 20px;max-height:620px;overflow-y:auto}
+.rte-prev-title{font-size:21px;font-weight:700;color:var(--ink);margin:0 0 10px}
+.rte-prev-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.rte-prev-tabs .chip{font-size:12px;height:30px;padding:0 10px;pointer-events:none}
+.doc-prev{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;font-size:14.5px}
+@media(max-width:1020px){
+  .rte-split{grid-template-columns:1fr}
+}
+
 @media(max-width:600px){
   .gw-sep{display:none}
   .gw-strip{position:relative;flex-direction:column;align-items:flex-start;gap:6px;padding-right:42px}
