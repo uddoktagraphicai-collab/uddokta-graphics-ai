@@ -408,7 +408,7 @@ function side() {
   var cur = OWNER[A.page] || A.page;
   return '<div class="navov" onclick="closeNav()"></div><aside class="side aside"><div class="brandmark"><img src="' + LOGO + '" alt=""><div>উদ্যোক্তা গ্রাফিক্স AI<small><span class="tagadm">অ্যাডমিন প্যানেল</span></small></div><a class="sclose" onclick="closeNav()" title="বন্ধ করুন" aria-label="মেনু বন্ধ করুন">' + I.x + '</a></div><nav class="nav">' +
     NAV.map(function (n) { return n[0] === 'grp' ? '<div class="grp">' + n[1] + '</div>' : '<a data-go="' + n[0] + '" class="' + (n[0] === cur ? 'on' : '') + '">' + I[n[2]] + n[1] + (n[0] === 'payments' && A.pending ? '<span class="cnt or">' + BN(A.pending) + '</span>' : '') + '</a>'; }).join('') +
-    '</nav><div class="sfoot"><div class="me"><div class="av" style="background:var(--or);color:#16110A">অ</div><div>অ্যাডমিন<small><a href="/app" target="_blank" style="color:var(--ink2)">অ্যাপ দেখুন ↗</a></small></div><a onclick="logout()" title="লগআউট">' + I.out + '</a></div></div></aside>';
+    '</nav><div class="sfoot"><a class="site-visit" href="/" target="_blank" rel="noopener">' + I.globe + '<span>মূল ওয়েবসাইট দেখুন</span><span class="sv-arr">↗</span></a><div class="me"><div class="av" style="background:var(--or);color:#16110A">অ</div><div>অ্যাডমিন<small><a href="/app" target="_blank" style="color:var(--ink2)">অ্যাপ দেখুন ↗</a></small></div><a onclick="logout()" title="লগআউট">' + I.out + '</a></div></div></aside>';
 }
 function mtop() { return '<div class="mtop"><a onclick="document.body.classList.toggle(\'navon\')">' + I.menu + '</a><b>অ্যাডমিন প্যানেল</b></div>'; }
 document.addEventListener('keydown', function (e) {

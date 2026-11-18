@@ -78,6 +78,7 @@ var I = {
   eye: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
   eyeOff: '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
   home: '<svg class="i" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-6h4v6"/></svg>',
+  globe: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.6 9h16.8M3.6 15h16.8M11.5 3a17 17 0 0 0 0 18M12.5 3a17 17 0 0 1 0 18"/></svg>',
   grid: '<svg class="i" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>',
   play: '<svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m10.5 9.3 4.2 2.7-4.2 2.7z"/></svg>',
   user: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4.1-5.4 7.5-5.4s6.3 1.8 7.5 5.4"/></svg>',
@@ -343,8 +344,9 @@ function side(tab) {
   else mem = '<div class="mem"><div class="lab" style="color:var(--or)"><i style="background:var(--or)"></i>' + (m.expired ? (T('t91e4d553', 'মেয়াদ শেষ')) : (T('t806d0cd6', 'ঘুরে দেখছেন'))) + '</div><b>' + (m.expired ? (T('tb5cd28f6', 'মেয়াদ বাড়িয়ে নিন')) : (T('tab1e6d53', 'সব স্টাইল লক করা'))) + ('</b><p>' + T('t667044e8', '৳')) + BN(price()) + (' ' + T('t39e90da0', '/ বছর · প্রতিদিন ১ টাকা') + '</p><a class="btn" data-go="member" style="height:42px;font-size:15px;margin-top:12px">' + T('tbc82fc73', 'মেম্বারশিপ নিন') + '</a></div>');
   var me = S.phone ? '<div class="me">' + logoBox('av') + '<div>' + esc(m.brand || (T('t527707e0', 'আপনার ব্র্যান্ড'))) + '<small>' + esc(S.phone) + ('</small></div><a data-go="logout" title="' + T('te5ff418f', 'লগআউট') + '">') + I.out + '</a></div>'
     : '<div class="me"><div class="av" style="background:var(--card2);color:var(--mut)">' + I.user.replace('class="i"', 'class="i" width="18" height="18"') + ('</div><div>' + T('tb5baccc8', 'অতিথি') + '<small>' + T('t15b7f843', 'লগইন করা নেই') + '</small></div><a data-go="login" style="font-size:14px;color:var(--ink2);text-decoration:none">' + T('t86b9a1b4', 'লগইন') + '</a></div>');
+  var siteBtn = '<a class="site-visit" href="/" target="_blank" rel="noopener">' + I.globe + '<span>মূল ওয়েবসাইট দেখুন</span><span class="sv-arr">↗</span></a>';
   return '<aside class="side"><div class="brandmark"><img src="' + LOGO + '" alt=""><div>' + APPNAME + '<small>by eCom Design Solution</small></div></div><nav class="nav">' +
-    TABS.map(function (t) { return '<a data-go="' + t[0] + '" class="' + (t[0] === tab ? 'on' : '') + '">' + I[t[2]] + t[1] + '</a>'; }).join('') + '</nav><div class="sfoot">' + mem + me + '</div></aside>';
+    TABS.map(function (t) { return '<a data-go="' + t[0] + '" class="' + (t[0] === tab ? 'on' : '') + '">' + I[t[2]] + t[1] + '</a>'; }).join('') + '</nav><div class="sfoot">' + mem + siteBtn + me + '</div></aside>';
 }
 function topm() { return '<header class="top2"><a class="hb" onclick="drawer(true)">' + I.menu + '</a><div class="brandmark"><img src="' + LOGO + '" alt=""><div>' + APPNAME + '</div></div>' + memPill() + '</header>'; }
 function tabs2(tab) {
@@ -360,7 +362,8 @@ function drawerHtml(tab) {
   return '<div class="dov"></div><aside class="dr"><div class="dtop"><div class="brandmark"><img src="' + LOGO + '" alt=""><div>' + APPNAME + '</div></div><a class="hb" onclick="goBack()">' + I.x + '</a></div>' + head +
     '<nav>' + nav1.map(function (n) { return '<a data-go="' + n[0] + '" class="' + (n[0] === tab ? 'on' : '') + '">' + I[n[2]].replace('width="16" height="16"', '') + n[1] + '</a>'; }).join('') + '</nav>' +
     (P.length ? ('<div class="dsec">' + T('t05e84ffe', 'পলিসি') + '</div><nav class="dsm" style="margin-top:0">') + P.map(function (p) { return '<a onclick="openPolicy(\'' + esc(p.key) + '\')">' + I.doc + esc(p.title) + '</a>'; }).join('') + '</nav>' : '') +
-    (S.phone ? '<div class="dfoot"><a data-go="logout">' + I.out + (T('te5ff418f', 'লগআউট') + '</a></div>') : '') + '</aside>';
+    '<div class="dfoot"><a class="site-visit" href="/" target="_blank" rel="noopener">' + I.globe + '<span>মূল ওয়েবসাইট দেখুন</span><span class="sv-arr">↗</span></a>' +
+    (S.phone ? '<a data-go="logout">' + I.out + (T('te5ff418f', 'লগআউট') + '</a>') : '') + '</div></aside>';
 }
 function wtop(title, right) { return '<header class="wtop"><a class="back" data-go="back">' + I.back + '</a><h1>' + title + '</h1><span>' + (right || '') + '</span></header>'; }
 function lback(txt) { return '<a class="lback lonly" data-go="back">' + I.back + txt + '</a>'; }

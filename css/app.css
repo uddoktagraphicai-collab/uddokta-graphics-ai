@@ -120,6 +120,11 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
   .nav a.on{background:var(--card);color:var(--ink);box-shadow:inset 3px 0 0 var(--or)}
   .nav a.on svg{color:var(--or)}
   .sfoot{margin-top:auto}
+  .sfoot .site-visit{display:flex;align-items:center;gap:8px;padding:9px 12px;margin-top:10px;border-radius:10px;background:var(--card);border:1px solid var(--line);color:var(--ink2);font-size:13.5px;font-weight:600;text-decoration:none;transition:border-color .16s ease,background .16s ease,color .16s ease}
+  .sfoot .site-visit svg{width:17px;height:17px;color:var(--or);flex-shrink:0}
+  .sfoot .site-visit .sv-arr{margin-left:auto;font-size:12.5px;color:var(--mut)}
+  .sfoot .site-visit:hover{border-color:rgba(243,146,0,.45);background:rgba(243,146,0,.08);color:var(--or)}
+  .sfoot .site-visit:hover .sv-arr{color:var(--or)}
   .mem{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
   .mem .lab{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--ok)}
   .mem .lab i{width:7px;height:7px;border-radius:50%;background:var(--ok)}
@@ -450,6 +455,9 @@ body.bare{padding-left:0!important}body.bare .side{display:none!important}
 .dr .dfoot{margin-top:auto;border-top:1px solid var(--line);padding-top:12px}
 .dr .dfoot a{display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;color:#F0606A;text-decoration:none;font-size:15px}
 .dr .dfoot a svg{width:20px;height:20px}
+.dr .dfoot a.site-visit{height:42px;margin-bottom:6px;border-radius:10px;background:var(--card);border:1px solid var(--line);color:var(--ink2);font-size:14px;font-weight:600}
+.dr .dfoot a.site-visit svg{width:18px;height:18px;color:var(--or)}
+.dr .dfoot a.site-visit .sv-arr{margin-left:auto;font-size:13px;color:var(--mut)}
 .dr .dlk{padding:16px;border:1px solid rgba(243,146,0,.35);border-radius:12px;background:rgba(243,146,0,.06)}
 .dr .dlk b{display:block;font-size:16.5px}
 .dr .dlk p{font-size:13.5px;color:var(--mut);margin:2px 0 12px}

@@ -352,8 +352,7 @@ footer{border-top:1px solid var(--line);padding-block:28px;font-size:15px;color:
   .nav .lg img{width:28px;height:28px}
   .nav .lg span span{font-size:12.5px}
   .nav .act{gap:4px}
-  .nav .gh{display:none}
-  .nav .btn.pri{height:32px;padding:0 10px;font-size:12px}
+  .nav .gh{height:32px;padding:0 10px;font-size:12px}
   .hero h1{font-size:24px}
   .hero .sub{font-size:14px}
   .vis .flow{max-width:280px}
