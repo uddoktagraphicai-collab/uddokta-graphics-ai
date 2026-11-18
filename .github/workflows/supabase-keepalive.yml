@@ -1,0 +1,39 @@
+name: Supabase Keep-Alive
+
+on:
+  schedule:
+    # প্রতি ৩ দিন পরপর দুপুর ১২টায় (BD Time / 06:00 UTC) চলবে — ৭ দিনের Auto-Pause ঠেকাতে
+    - cron: '0 6 */3 * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: supabase-keepalive
+  cancel-in-progress: true
+
+jobs:
+  keep-alive:
+    name: Ping Supabase API & PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Query Supabase Edge Function + PostgreSQL
+        run: |
+          set -euo pipefail
+
+          API_URL="https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api"
+          BODY=$(curl --silent --show-error --fail \
+            --retry 3 --retry-delay 5 --max-time 30 \
+            -X POST "$API_URL" \
+            -H "Content-Type: application/json" \
+            -d '{"action":"lp"}')
+
+          echo "Response length: ${#BODY} bytes"
+          if ! echo "$BODY" | grep -q '"ok":true'; then
+            echo "ERROR: Unexpected response from Supabase keep-alive endpoint."
+            echo "$BODY" | head -c 300
+            exit 1
+          fi
+
+          echo "Supabase PostgreSQL & Edge Function keep-alive succeeded at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
