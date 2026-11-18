@@ -297,6 +297,52 @@ fetch(postgrestLandingUrl, {
   console.warn('PostgREST landing_config fetch error:', err);
 });
 
+// Facebook / Meta Pixel (ডায়নামিক অ্যাডমিন সেটিংস থেকে লোড)
+var _lpPixelId = '';
+function initLandingMetaPixel(pid) {
+  pid = String(pid || '').replace(/\D/g, '');
+  if (!pid || pid.length < 8 || _lpPixelId === pid) return;
+  _lpPixelId = pid;
+  try {
+    if (!window.fbq) {
+      (function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+        if (!f._fbq) f._fbq = n;
+        n.push = n; n.loaded = true; n.version = '2.0'; n.queue = [];
+        t = b.createElement(e); t.async = true; t.src = v;
+        s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s);
+      })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+    }
+    window.fbq('init', pid);
+    window.fbq('track', 'PageView');
+  } catch (e) {}
+}
+try {
+  var _cachedPid = localStorage.getItem('ug_meta_pixel_id') || '';
+  if (_cachedPid) initLandingMetaPixel(_cachedPid);
+} catch (e) {}
+fetch('https://jfrpvijkfcsfewtljnah.supabase.co/rest/v1/rpc/get_public_pay_settings', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'apikey': anonKey, 'Authorization': 'Bearer ' + anonKey },
+  body: '{}'
+}).then(function (r) { return r.json(); }).then(function (d) {
+  if (d && d.ok) {
+    var pid = String(d.meta_pixel_id || '').trim();
+    try { localStorage.setItem('ug_meta_pixel_id', pid); } catch (e) {}
+    if (pid) initLandingMetaPixel(pid);
+  }
+}).catch(function () {});
+document.addEventListener('click', function (e) {
+  if (!_lpPixelId || typeof window.fbq !== 'function') return;
+  var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+  if (!a) return;
+  var hr = a.getAttribute('href') || '';
+  if (hr.indexOf('/app') > -1 || hr.indexOf('app.html') > -1 || hr === '#price') {
+    try { window.fbq('track', 'ViewContent', { content_name: 'Landing CTA', content_type: 'product' }); } catch (err) {}
+  }
+});
+
 if(U)fetch(U+"?q="+encodeURIComponent(JSON.stringify({action:"lp"}))+"&t="+Date.now()).then(function(r){return r.json()}).then(function(r){
   if(r&&r.ok){
     if (r.t) {
@@ -654,6 +700,39 @@ try {
   initSlider();
 } catch (e) {}
 window.__lpApply=apply; window.__lpApplyConfig=applyLandingConfig;
+// আলাপ AI ফ্লোটিং বাটনে স্মুথ পালস ইফেক্ট (Open Shadow DOM)
+(function initAlapPulse() {
+  var css = '' +
+    '@keyframes alapPulse{' +
+      '0%{box-shadow:0 8px 22px -6px rgba(0,0,0,.45),0 0 0 0 color-mix(in srgb,var(--primary-color,#3b82f6) 55%,transparent)}' +
+      '70%{box-shadow:0 8px 22px -6px rgba(0,0,0,.45),0 0 0 15px color-mix(in srgb,var(--primary-color,#3b82f6) 0%,transparent)}' +
+      '100%{box-shadow:0 8px 22px -6px rgba(0,0,0,.45),0 0 0 0 color-mix(in srgb,var(--primary-color,#3b82f6) 0%,transparent)}' +
+    '}' +
+    '.alapai-chat-button{animation:alapPulse 2.6s cubic-bezier(.22,1,.36,1) 1.3s infinite!important}' +
+    '.alapai-chat-button:hover,.alapai-chat-window.open ~ .alapai-chat-button{animation:none!important}' +
+    '@media(prefers-reduced-motion:reduce){.alapai-chat-button{animation:none!important}}';
+  function tryPatch() {
+    var nodes = document.body ? document.body.children : [];
+    for (var i = nodes.length - 1; i >= 0; i--) {
+      var sr = nodes[i] && nodes[i].shadowRoot;
+      if (sr && sr.querySelector('.alapai-chat-button')) {
+        if (!sr.getElementById('ug-alap-pulse')) {
+          var st = document.createElement('style');
+          st.id = 'ug-alap-pulse';
+          st.textContent = css;
+          sr.appendChild(st);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+  if (!tryPatch() && typeof MutationObserver !== 'undefined') {
+    var mo = new MutationObserver(function () { if (tryPatch()) mo.disconnect(); });
+    mo.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(function () { try { mo.disconnect(); } catch (e) {} }, 15000);
+  }
+})();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('/sw.js').catch(function () {});

@@ -9,7 +9,7 @@ button,input{font-family:inherit}
 
 /* --- ১. অ্যাপ শেল ও বেসিক লেআউট --- */
 .side{display:none}
-.top{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--bg)}
+.top{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;padding:calc(14px + env(safe-area-inset-top,0px)) 20px 14px;border-bottom:1px solid var(--line);background:rgba(21,21,24,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
 .brandmark{display:flex;align-items:center;gap:10px;font-size:17px;font-weight:700}
 .brandmark img{width:30px;height:30px;object-fit:contain}
 .brandmark small{display:block;font-size:12px;font-weight:400;color:var(--mut);line-height:1.2}
@@ -75,7 +75,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
 .st .pop:before{content:"";display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--or);margin-right:6px;vertical-align:2px}
 
 /* --- ৫. প্রম্পট রাইটিং ও ফর্ম ইনপুট --- */
-.wtop{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line)}
+.wtop{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;gap:12px;padding:calc(12px + env(safe-area-inset-top,0px)) 20px 12px;min-height:calc(65px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--line);background:rgba(21,21,24,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
 .back{width:40px;height:40px;border:1px solid var(--line);border-radius:8px;display:grid;place-items:center;color:var(--ink);background:var(--card)}
 .back svg{width:20px;height:20px}
 .wtop h1{font-size:18px;font-weight:700}
@@ -103,7 +103,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
 .in::placeholder{color:#6C6D76}
 .in.fo{border-color:var(--or);box-shadow:0 0 0 3px rgba(243,146,0,.14)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.cta{position:fixed;left:0;right:0;bottom:0;padding:12px 20px 16px;background:var(--bg);border-top:1px solid var(--line)}
+.cta{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:12px 20px calc(16px + env(safe-area-inset-bottom,0px));background:var(--bg);border-top:1px solid var(--line)}
 .cta p{font-size:13px;color:var(--mut);text-align:center;margin-top:8px}
 .wmain{padding:20px 20px 130px}
 .wsample{display:none}
@@ -358,7 +358,7 @@ svg.i{fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke
 .ptabs{display:flex;gap:8px;margin-top:18px;overflow-x:auto}
 
 /* শিট / পপআপ */
-.ov{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-end;z-index:20}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:flex-end;z-index:65}
 .sheet{width:100%;background:var(--card);border-top:1px solid var(--line);border-radius:12px 12px 0 0;padding:10px 20px calc(24px + env(safe-area-inset-bottom,0px))}
 .sheet .grab{width:40px;height:4px;border-radius:2px;background:#3A3A44;margin:0 auto 18px}
 .sheet .sic{width:52px;height:52px;border-radius:12px;display:grid;place-items:center;margin-bottom:14px}
@@ -409,10 +409,12 @@ body.bare{padding-left:0!important}body.bare .side{display:none!important}
 @media (min-width:900px){.lback.lonly{display:inline-flex}}
 @media (max-width:899px){.res{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:24px 4px}}
 /* --- ৮. মোবাইল নেভিগেশন বার --- */
-.top2{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--bg)}
+.top2{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;gap:12px;padding:calc(12px + env(safe-area-inset-top,0px)) 16px 12px;min-height:calc(67px + env(safe-area-inset-top,0px));border-bottom:1px solid var(--line);background:rgba(21,21,24,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
 .hb{width:42px;height:42px;border:1px solid var(--line);border-radius:8px;background:var(--card);display:grid;place-items:center;color:var(--ink);flex:none}
 .hb svg{width:22px;height:22px}
-.top2 .brandmark{flex:1}
+.top2 .brandmark{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top2 .brandmark > div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top2 .pill{flex:none;white-space:nowrap}
 .tabs2{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1fr 76px 1fr 1fr;align-items:end;background:var(--bg2);border-top:1px solid var(--line);padding:8px 6px calc(12px + env(safe-area-inset-bottom,0px));z-index:50}
 .tabs2 a{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;color:var(--mut);text-decoration:none}
 .tabs2 a svg{width:23px;height:23px}
@@ -420,8 +422,8 @@ body.bare{padding-left:0!important}body.bare .side{display:none!important}
 .tabs2 .fab{gap:5px;color:var(--ink);font-weight:700}
 .tabs2 .fab span{width:54px;height:54px;border-radius:12px;background:var(--or);color:#16110A;display:grid;place-items:center;margin-top:-26px;border:4px solid var(--bg2);box-sizing:content-box}
 .tabs2 .fab span svg{width:26px;height:26px;stroke-width:2.6}
-.dov{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:30}
-.dr{position:fixed;left:0;top:0;bottom:0;width:84%;max-width:330px;background:var(--bg2);border-right:1px solid var(--line);z-index:31;display:flex;flex-direction:column;padding:16px 14px 18px}
+.dov{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:60}
+.dr{position:fixed;left:0;top:0;bottom:0;width:84%;max-width:330px;background:var(--bg2);border-right:1px solid var(--line);z-index:61;display:flex;flex-direction:column;padding:calc(16px + env(safe-area-inset-top,0px)) 14px 18px}
 .dr .dtop{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 14px}
 .dr .dtop .hb{width:38px;height:38px}
 .dr .dbr{display:flex;gap:12px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
@@ -450,7 +452,12 @@ body.bare{padding-left:0!important}body.bare .side{display:none!important}
 .bigcta b svg{width:22px;height:22px;margin-left:auto}
 .bigcta span{display:block;font-size:14px;margin-top:4px;color:#3B2A08}
 
-@media (max-width:899px){.main{padding-bottom:calc(120px + env(safe-area-inset-bottom,0px))}}
+@media (max-width:899px){
+  .main{padding-bottom:calc(120px + env(safe-area-inset-bottom,0px))}
+  .top2 + .main,.top + .main{padding-top:calc(91px + env(safe-area-inset-top,0px))}
+  .wtop + .wmain{padding-top:calc(85px + env(safe-area-inset-top,0px))}
+  .wtop + .main{padding-top:calc(89px + env(safe-area-inset-top,0px))}
+}
 
 /* --- ৯. পেমেন্ট, লোডিং, মডাল ও ইউটিলিটি স্টাইল --- */
 .blogo{overflow:hidden;background:#FFFFFF}
@@ -577,6 +584,13 @@ select.in{appearance:none;-webkit-appearance:none;padding-right:38px}
 .mcard .btn+.btn{margin-top:10px}
 @media (min-width:900px){.top2,.tabs2{display:none!important}}
 .paynote{font-size:13px;color:var(--mut);text-align:center;margin-top:10px;line-height:1.55}
+.payfee-hint{display:block;font-size:12px;color:var(--mut);opacity:.82;margin-top:2px}
+.pay-sum{margin:14px 0 12px;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.pay-sum .ps-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14.5px;color:var(--ink2);padding:5px 0}
+.pay-sum .ps-row b{color:var(--ink);font-weight:600}
+.pay-sum .ps-row.tot{margin-top:6px;padding-top:10px;border-top:1px dashed var(--line);font-size:16px;color:var(--ink);font-weight:700}
+.pay-sum .ps-row.tot b{color:var(--or);font-size:18px;font-weight:700}
+.sheet .pay-sum-note{font-size:12.5px;color:var(--mut);line-height:1.55;margin:0 0 18px}
 .epsck{display:block;width:100%;max-width:420px;margin:14px auto 0;border-radius:8px}
 .epsft{display:block;margin:22px 0 8px}.epsft img{display:block;width:100%;height:auto;border-radius:10px}
 .st{position:relative}

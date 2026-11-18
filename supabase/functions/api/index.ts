@@ -320,12 +320,17 @@ Deno.serve(async (req: Request) => {
           };
         });
 
+      const rawGatewayFee = settingsMap.gateway_fee;
+      const gatewayFeeVal = (rawGatewayFee !== undefined && rawGatewayFee !== null && String(rawGatewayFee).trim() !== '') ? String(rawGatewayFee).trim() : '0';
+
       const resData = {
         ok: true,
         settings: {
           price: settingsMap.price || '399',
           monthly: settingsMap.monthly || '33',
-          days: settingsMap.days || '365'
+          days: settingsMap.days || '365',
+          gateway_fee: gatewayFeeVal,
+          meta_pixel_id: String(settingsMap.meta_pixel_id || '').trim()
         },
         texts: textsMap,
         cats: (catsList || []).map((c: any) => ({ id: c.id, name: c.name })),
@@ -381,7 +386,20 @@ Deno.serve(async (req: Request) => {
         member = newMem;
       }
 
-      // ৪-সংখ্যার OTP তৈরি ও সেভ করা (ভবিষ্যৎ বা গেটওয়ের জন্য প্রস্তুত)
+      // সার্ভার-সাইড OTP রেট লিমিট (৫৫ সেকেন্ডের মধ্যে একই নম্বরে পুনরায় SMS পাঠানো বন্ধ)
+      const { data: prevOtp } = await supabase
+        .from('otp_codes')
+        .select('created_at')
+        .eq('phone', phone)
+        .single();
+      if (prevOtp && prevOtp.created_at) {
+        const elapsedSec = Math.floor((Date.now() - new Date(prevOtp.created_at).getTime()) / 1000);
+        if (elapsedSec >= 0 && elapsedSec < 55) {
+          return json({ ok: false, err: `অনুগ্রহ করে ${55 - elapsedSec} সেকেন্ড পর আবার ওটিপি চেষ্টা করুন` });
+        }
+      }
+
+      // ৪-সংখ্যার OTP তৈরি ও সেভ করা
       const otp = String(Math.floor(1000 + Math.random() * 9000));
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
@@ -389,7 +407,8 @@ Deno.serve(async (req: Request) => {
         phone,
         otp,
         expires_at: expiresAt,
-        attempts: 0
+        attempts: 0,
+        created_at: new Date().toISOString()
       });
 
       // SMS Gateway কল (BulkSMSBD - DB Settings || .env)
@@ -481,19 +500,52 @@ Deno.serve(async (req: Request) => {
       const pass = String(q.password || '').trim();
       if (!pass || pass.length < 4) return json({ ok: false, err: 'কমপক্ষে ৪ সংখ্যার পাসওয়ার্ড দিন' });
       const pHash = q.hash || (await sha256Hex(pass));
+      const setupTok = String(q.setup_token || '').trim();
+
+      let tokValid = false;
+      if (setupTok) {
+        const { data: tRow } = await supabase
+          .from('otp_verified_tokens')
+          .select('token, expires_at')
+          .eq('token', setupTok)
+          .eq('phone', phone)
+          .single();
+        if (tRow && new Date(tRow.expires_at).getTime() > Date.now()) {
+          tokValid = true;
+          await supabase.from('otp_verified_tokens').delete().eq('token', setupTok);
+        }
+      }
+
+      if (!tokValid) {
+        const { data: existingMem } = await supabase
+          .from('members')
+          .select('verified, password_hash')
+          .eq('phone', phone)
+          .single();
+        if (!existingMem || !existingMem.verified || existingMem.password_hash) {
+          return json({ ok: false, err: 'অনুমোদিত নয়! পাসওয়ার্ড সেট বা রিসেট করতে ওটিপি যাচাই প্রয়োজন।' });
+        }
+      }
 
       const { data: updated, error } = await supabase
         .from('members')
         .upsert({
           phone,
           password_hash: pHash,
-          verified: true
+          verified: true,
+          last_seen: new Date().toISOString()
         })
         .select()
         .single();
 
       if (error) return json({ ok: false, err: error.message });
-      return json({ ok: true, member: formatPubMember(updated) });
+      const sessTok = `ms_${crypto.randomUUID().replace(/-/g, '')}`;
+      await supabase.from('member_sessions').insert({
+        token: sessTok,
+        phone,
+        expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()
+      });
+      return json({ ok: true, member: formatPubMember(updated), session_token: sessTok });
     }
 
     if (action === 'login_password') {
@@ -513,11 +565,35 @@ Deno.serve(async (req: Request) => {
       }
 
       await supabase.from('members').update({ last_seen: new Date().toISOString() }).eq('phone', phone);
-      return json({ ok: true, member: formatPubMember(member) });
+      const sessTok = `ms_${crypto.randomUUID().replace(/-/g, '')}`;
+      await supabase.from('member_sessions').insert({
+        token: sessTok,
+        phone,
+        expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()
+      });
+      return json({ ok: true, member: formatPubMember(member), session_token: sessTok });
     }
 
     if (!phone && !action.startsWith('a_')) {
       return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+    }
+
+    // মেম্বার প্রটেক্টেড অ্যাকশনগুলোর জন্য বাধ্যতামূলক সেশন টোকেন যাচাই
+    const memberProtectedActions = ['me', 'mypay', 'brand', 'cmd', 'my_history', 'clear_history', 'pay_start'];
+    if (memberProtectedActions.includes(action)) {
+      const mTok = String(q.tok || '').trim();
+      if (!mTok) {
+        return json({ ok: false, auth: false, err: 'লগইন সেশন পাওয়া যায়নি, আবার লগইন করুন' });
+      }
+      const { data: mSess } = await supabase
+        .from('member_sessions')
+        .select('token, expires_at')
+        .eq('token', mTok)
+        .eq('phone', phone)
+        .single();
+      if (!mSess || new Date(mSess.expires_at).getTime() < Date.now()) {
+        return json({ ok: false, auth: false, err: 'সেশনের মেয়াদ শেষ, আবার লগইন করুন' });
+      }
     }
 
     // -----------------------------------------------------------------
@@ -776,7 +852,15 @@ Deno.serve(async (req: Request) => {
       const epsCfg = getEpsConfig(stMap);
       if (!epsCfg.ready) return json({ ok: false, err: 'পেমেন্ট গেটওয়ে কনফিগারেশন এখনো সম্পন্ন হয়নি' });
 
-      const price = Number(stMap.price) || 399;
+      const basePrice = Number(stMap.price) || 399;
+      const rawFee = stMap.gateway_fee;
+      const feePct = (rawFee !== undefined && rawFee !== null && String(rawFee).trim() !== '')
+        ? Math.max(0, Number(rawFee) || 0)
+        : 0;
+      const feeAmt = (basePrice > 0 && feePct > 0)
+        ? Math.ceil(Number(((basePrice * feePct) / 100).toFixed(4)))
+        : 0;
+      const totalPayable = basePrice + feeAmt;
 
       const tx = String(Date.now()) + String(Math.floor(100 + Math.random() * 900));
       
@@ -796,18 +880,22 @@ Deno.serve(async (req: Request) => {
       const returnUrl = `${returnBase}?eps=back&tx=${tx}`;
 
       try {
-        const initRes = await initializePayment(epsCfg, tx, price, member, returnUrl);
+        const initRes = await initializePayment(epsCfg, tx, totalPayable, member, returnUrl);
+
+        const feeNote = feeAmt > 0 ? `প্যাকেজ ৳${basePrice} + গেটওয়ে চার্জ (${feePct}%) ৳${feeAmt}` : '';
+        const modeNote = epsCfg.mode === 'sandbox' ? 'টেস্ট (sandbox)' : '';
+        const payNote = [feeNote, modeNote].filter(Boolean).join(' · ');
 
         await supabase.from('payments').insert({
           id: tx,
           phone: member.phone,
           method: 'EPS',
-          amount: price,
+          amount: totalPayable,
           status: 'pending',
-          note: epsCfg.mode === 'sandbox' ? 'টেস্ট (sandbox)' : ''
+          note: payNote
         });
 
-        return json({ ok: true, url: initRes.redirectUrl });
+        return json({ ok: true, url: initRes.redirectUrl, basePrice, feePct, feeAmt, totalPayable });
       } catch (err: any) {
         return json({ ok: false, err: err.message || 'পেমেন্ট শুরু করা যায়নি' });
       }
@@ -820,17 +908,20 @@ Deno.serve(async (req: Request) => {
       if (action === 'a_login') {
         const pass = String(q.pass || '');
         const { data: pRow } = await supabase.from('settings').select('value').eq('key', 'admin_password').single();
-        const currentPass = pRow?.value || Deno.env.get('ADMIN_PASSWORD') || 'admin1234';
+        const currentPass = pRow?.value || Deno.env.get('ADMIN_PASSWORD') || '';
         const adminSecret = Deno.env.get('ADMIN_PASSWORD_HASH') || '';
+        if (!currentPass && !adminSecret) {
+          return json({ ok: false, err: 'অ্যাডমিন পাসওয়ার্ড কনফিগার করা নেই' });
+        }
         const passHash = await sha256Hex(pass);
 
         // নিরাপদ ভ্যালিডেশন: প্লেইনটেক্সট বা SHA-256 হ্যাশ ম্যাচিং
-        const isValid = pass && (
-          pass === currentPass ||
+        const isValid = Boolean(pass) && (
+          (currentPass && pass === currentPass) ||
           (adminSecret && (pass === adminSecret || passHash === adminSecret.toLowerCase()))
         );
         if (isValid) {
-          const tok = `adm_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+          const tok = `adm_${crypto.randomUUID().replace(/-/g, '')}`;
           await supabase.from('admin_sessions').insert({
             token: tok,
             expires_at: new Date(Date.now() + 6 * 3600 * 1000).toISOString()
@@ -896,7 +987,7 @@ Deno.serve(async (req: Request) => {
         // চলতি মাসের হিসাব (Dhaka Time Month YYYY-MM)
         const curMonthPrefix = today.slice(0, 7);
         const curMonthPays = successPays.filter((p: any) => {
-          const rawDate = String(p.created_at || p.time || '');
+          const rawDate = String(p.done_at || p.created_at || p.time || '');
           return rawDate.slice(0, 7) === curMonthPrefix;
         });
         const monthRev = curMonthPays.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
@@ -918,6 +1009,91 @@ Deno.serve(async (req: Request) => {
           revTotal: totalRev,
           top: stList || [],
           recent
+        });
+      }
+
+      // সিস্টেম ও গেটওয়ে লাইভ হেলথ চেক (BulkSMSBD ব্যালেন্স, Cloudinary স্টোরেজ, Supabase পিং, EPS)
+      if (action === 'a_health') {
+        const t0 = Date.now();
+        const { data: stList } = await supabase.from('settings').select('*');
+        const dbMs = Date.now() - t0;
+        const stMap: Record<string, string> = {};
+        (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+
+        const smsCfg = getSmsConfig(stMap);
+        const cldCfg = getCloudinaryConfig(stMap);
+        const epsCfg = getEpsConfig(stMap);
+
+        const fetchWithTimeout = async (url: string, init: RequestInit = {}, ms = 6000) => {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), ms);
+          try {
+            return await fetch(url, { ...init, signal: ctrl.signal });
+          } finally {
+            clearTimeout(timer);
+          }
+        };
+
+        const checkSms = async () => {
+          if (!smsCfg.ready) return { ready: false, ok: false, balance: null, estSms: null };
+          try {
+            const balUrl = `https://bulksmsbd.net/api/getBalanceApi?api_key=${encodeURIComponent(smsCfg.apiToken)}`;
+            const res = await fetchWithTimeout(balUrl, { method: 'GET' });
+            const txt = await res.text();
+            let balNum: number | null = null;
+            try {
+              const j = JSON.parse(txt);
+              const raw = j.balance ?? j.Balance ?? j.data?.balance ?? j.credit ?? null;
+              if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+                const parsed = parseFloat(String(raw).replace(/[^\d.-]/g, ''));
+                if (!isNaN(parsed)) balNum = parsed;
+              }
+            } catch {
+              const m = txt.match(/(\d+(?:\.\d+)?)/);
+              if (m) balNum = parseFloat(m[1]);
+            }
+            const estSms = (balNum !== null && balNum >= 0) ? Math.floor(balNum / 0.35) : null;
+            return { ready: true, ok: balNum !== null, balance: balNum, estSms, senderId: smsCfg.senderId || '' };
+          } catch (e: any) {
+            return { ready: true, ok: false, balance: null, estSms: null, err: e?.message || 'Timeout' };
+          }
+        };
+
+        const checkCloudinary = async () => {
+          if (!cldCfg.ready) return { ready: false, ok: false };
+          try {
+            const auth = btoa(`${cldCfg.apiKey}:${cldCfg.apiSecret}`);
+            const res = await fetchWithTimeout(
+              `https://api.cloudinary.com/v1_1/${encodeURIComponent(cldCfg.cloudName)}/usage`,
+              { headers: { 'Authorization': `Basic ${auth}` } }
+            );
+            if (!res.ok) return { ready: true, ok: false, status: res.status };
+            const j = await res.json();
+            const bytes = Number(j?.storage?.usage) || 0;
+            const resources = Number(j?.resources) || 0;
+            const usedPct = Number(j?.credits?.used_percent ?? j?.storage?.used_percent ?? 0);
+            const storageMB = Math.round((bytes / (1024 * 1024)) * 10) / 10;
+            return {
+              ready: true,
+              ok: true,
+              cloudName: cldCfg.cloudName,
+              resources,
+              storageMB,
+              usedPct: Math.round(usedPct * 10) / 10
+            };
+          } catch (e: any) {
+            return { ready: true, ok: false, err: e?.message || 'Timeout' };
+          }
+        };
+
+        const [smsHealth, cldHealth] = await Promise.all([checkSms(), checkCloudinary()]);
+
+        return json({
+          ok: true,
+          supabase: { ok: true, ms: dbMs },
+          eps: { ready: epsCfg.ready, mode: epsCfg.mode },
+          sms: smsHealth,
+          cloudinary: cldHealth
         });
       }
 
@@ -964,6 +1140,7 @@ Deno.serve(async (req: Request) => {
         const isPaid = days > 0;
         const today = todayDhaka();
         const expiry = isPaid ? addDays(today, days) : null;
+        const noteStr = String(q.note || '').trim();
 
         const { error } = await supabase.from('members').insert({
           phone: ph,
@@ -971,11 +1148,33 @@ Deno.serve(async (req: Request) => {
           expiry,
           joined: today,
           made: 0,
-          note: String(q.note || '').trim()
+          note: noteStr
         });
 
         if (error) return json({ ok: false, err: error.message });
-        await logActivity(supabase, 'নতুন মেম্বার যুক্ত', `ফোন: ${ph} (${isPaid ? days + ' দিন পেইড' : 'নতুন'})`);
+
+        // পেইড হলে এবং টাকার পরিমাণ বা অর্ডার তৈরির অনুরোধ থাকলে Payments টেবিলে ম্যানুয়াল অর্ডার রেকর্ড তৈরি
+        const amount = Number(q.amount) || 0;
+        const createOrder = q.create_order !== undefined ? Boolean(q.create_order) : (isPaid && amount > 0);
+        if (isPaid && createOrder) {
+          const method = String(q.method || 'ম্যানুয়াল (বিকাশ/নগদ)').trim();
+          const trxCode = String(q.trx || '').trim() || ('MANUAL-' + Date.now().toString().slice(-6));
+          const payId = 'tx' + Date.now() + Math.floor(Math.random() * 900 + 100);
+
+          await supabase.from('payments').insert({
+            id: payId,
+            phone: ph,
+            amount: amount,
+            method: method,
+            trx: trxCode,
+            status: 'success',
+            by: 'admin',
+            done_at: new Date().toISOString(),
+            note: noteStr ? `ম্যানুয়াল মেম্বার তৈরি: ${noteStr}` : 'অ্যাডমিন দ্বারা ম্যানুয়াল মেম্বার তৈরি'
+          });
+        }
+
+        await logActivity(supabase, 'নতুন মেম্বার যুক্ত', `ফোন: ${ph} (${isPaid ? days + ' দিন পেইড' + (amount > 0 ? ', ৳' + amount : '') : 'নতুন'})`);
         return json({ ok: true });
       }
 
@@ -1115,6 +1314,99 @@ Deno.serve(async (req: Request) => {
       if (action === 'a_pay_check') {
         const res = await verifyPayment(supabase, q.id);
         return json(res);
+      }
+
+      // পেমেন্ট ম্যানুয়াল অনুমোদন (অপেক্ষায় থাকা পেমেন্ট ম্যানুয়ালি পেইড ও মেম্বারশিপ সক্রিয় করা)
+      if (action === 'a_pay_approve') {
+        const payId = String(q.id || '').trim();
+        if (!payId) return json({ ok: false, err: 'পেমেন্ট আইডি দিন' });
+
+        const { data: payRow } = await supabase.from('payments').select('*').eq('id', payId).single();
+        if (!payRow) return json({ ok: false, err: 'পেমেন্ট রেকর্ড পাওয়া যায়নি' });
+
+        const { data: stList } = await supabase.from('settings').select('*');
+        const stMap: Record<string, string> = {};
+        (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+        const packageDays = Number(stMap.days) || 365;
+
+        const today = todayDhaka();
+        const { data: mem } = await supabase.from('members').select('*').eq('phone', payRow.phone).single();
+        const baseDate = mem?.expiry && mem.expiry > today && (mem.status === 'paid' || mem.status === 'পেইড') ? mem.expiry : today;
+        const newExpiry = addDays(baseDate, packageDays);
+
+        if (mem) {
+          await supabase.from('members').update({
+            status: 'paid',
+            expiry: newExpiry
+          }).eq('phone', payRow.phone);
+        }
+
+        const manualTrx = payRow.trx || ('MANUAL-' + Date.now().toString().slice(-6));
+        const manualMethod = (payRow.method && payRow.method !== 'EPS') ? payRow.method : 'ম্যানুয়াল (বিকাশ/নগদ)';
+        const noteAdd = payRow.note ? (payRow.note + ' (অ্যাডমিন দ্বারা ম্যানুয়াল অনুমোদন)') : 'ম্যানুয়াল অনুমোদন (অ্যাডমিন)';
+
+        const { error: payErr } = await supabase.from('payments').update({
+          status: 'success',
+          trx: manualTrx,
+          method: manualMethod,
+          done_at: new Date().toISOString(),
+          by: 'admin',
+          note: noteAdd
+        }).eq('id', payId);
+
+        if (payErr) return json({ ok: false, err: payErr.message });
+
+        await logActivity(supabase, 'পেমেন্ট ম্যানুয়াল অনুমোদন', `আইডি: ${payId}, ফোন: ${payRow.phone}, টাকা: ৳${payRow.amount}`);
+        return json({ ok: true, status: 'success' });
+      }
+
+      // মেম্বারের জন্য সরাসরি ম্যানুয়াল পেমেন্ট/অর্ডার এন্ট্রি
+      if (action === 'a_pay_add') {
+        const ph = normPhone(q.phone);
+        if (!ph) return json({ ok: false, err: '১১ সংখ্যার সঠিক মোবাইল নম্বর দিন' });
+
+        const { data: mem } = await supabase.from('members').select('*').eq('phone', ph).single();
+        if (!mem) return json({ ok: false, err: 'মেম্বার পাওয়া যায়নি' });
+
+        const amount = Number(q.amount);
+        if (isNaN(amount) || amount < 0) return json({ ok: false, err: 'সঠিক টাকার পরিমাণ দিন' });
+
+        const { data: stList } = await supabase.from('settings').select('*');
+        const stMap: Record<string, string> = {};
+        (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+        const defaultDays = Number(stMap.days) || 365;
+        const extendDays = q.days !== undefined ? (Number(q.days) || 0) : defaultDays;
+
+        const payId = 'tx' + Date.now() + Math.floor(Math.random() * 900 + 100);
+        const trxCode = String(q.trx || '').trim() || ('MANUAL-' + Date.now().toString().slice(-6));
+        const method = String(q.method || 'ম্যানুয়াল (বিকাশ/নগদ)').trim();
+        const note = String(q.note || '').trim();
+
+        const { error: insErr } = await supabase.from('payments').insert({
+          id: payId,
+          phone: ph,
+          amount: amount,
+          method: method,
+          trx: trxCode,
+          status: 'success',
+          by: 'admin',
+          done_at: new Date().toISOString(),
+          note: note ? `ম্যানুয়াল পেমেন্ট: ${note}` : 'অ্যাডমিন দ্বারা ম্যানুয়াল পেমেন্ট'
+        });
+        if (insErr) return json({ ok: false, err: insErr.message });
+
+        if (extendDays > 0) {
+          const today = todayDhaka();
+          const baseDate = mem.expiry && mem.expiry > today && (mem.status === 'paid' || mem.status === 'পেইড') ? mem.expiry : today;
+          const newExpiry = addDays(baseDate, extendDays);
+          await supabase.from('members').update({
+            status: 'paid',
+            expiry: newExpiry
+          }).eq('phone', ph);
+        }
+
+        await logActivity(supabase, 'ম্যানুয়াল পেমেন্ট এন্ট্রি', `ফোন: ${ph}, টাকা: ৳${amount}, মাধ্যম: ${method}`);
+        return json({ ok: true, id: payId });
       }
 
       // পেমেন্ট/অর্ডার রেকর্ড ডিলিট (ড্যাশবোর্ড আয় রিক্যালকুলেট হবে)

@@ -118,16 +118,53 @@ function getSha256(text) {
 
 function api(action, data) {
   data = data || {}; data.action = action;
+  if (typeof S !== 'undefined' && S.tok && !data.tok) data.tok = S.tok;
   if (window.MOCK) return MOCK(data);
   return fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }).then(function (r) { return r.text(); }).then(function (t) {
-    try { return JSON.parse(t); } catch (e) { throw new Error((T('t50b6ef8a', 'সার্ভার থেকে ভুল উত্তর:') + ' ') + t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 90)); }
+    var parsed;
+    try { parsed = JSON.parse(t); } catch (e) { throw new Error((T('t50b6ef8a', 'সার্ভার থেকে ভুল উত্তর:') + ' ') + t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 90)); }
+    if (parsed && parsed.auth === false && typeof S !== 'undefined' && S.phone) {
+      ['eds_phone', 'eds_tok', 'eds_m'].forEach(LS.del);
+      S.phone = ''; S.tok = ''; S.member = null;
+      toast(parsed.err || 'সেশনের মেয়াদ শেষ, আবার লগইন করুন', 1);
+      go('login');
+    }
+    return parsed;
   });
 }
 function errMsg(e) { return (e && e.message && e.message.indexOf('সার্ভার') === 0) ? e.message : (T('t76afe202', 'সার্ভারে পৌঁছানো যাচ্ছে না, একটু পরে আবার চেষ্টা করুন')); }
+var FB_PIXEL_ID = '', FB_LAST_VIEW = '';
+function initMetaPixel(pid) {
+  pid = String(pid || '').replace(/\D/g, '');
+  if (!pid || pid.length < 8 || FB_PIXEL_ID === pid) return;
+  FB_PIXEL_ID = pid;
+  try {
+    if (!window.fbq) {
+      (function (f, b, e, v, n, t, s) {
+        if (f.fbq) return;
+        n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+        if (!f._fbq) f._fbq = n;
+        n.push = n; n.loaded = true; n.version = '2.0'; n.queue = [];
+        t = b.createElement(e); t.async = true; t.src = v;
+        s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s);
+      })(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+    }
+    window.fbq('init', pid);
+    window.fbq('track', 'PageView');
+    FB_LAST_VIEW = CUR || 'init';
+  } catch (e) {}
+}
+function fbTrack(ev, params) {
+  if (!FB_PIXEL_ID || typeof window.fbq !== 'function') return;
+  try {
+    if (params) window.fbq('track', ev, params);
+    else window.fbq('track', ev);
+  } catch (e) {}
+}
 var _topProgressTimer = null;
 function setTopProgress(pct) {
   var b = $('top-progress');
@@ -225,12 +262,17 @@ window.addEventListener('popstate', function (e) {
 function goBack() { if (history.state && history.length > 1) history.back(); else go('home'); }
 function go(v, fromHist) {
   if (!V[v]) v = 'home';
+  var prevCur = CUR;
   if (!fromHist && v !== CUR) { if (NOHIST.indexOf(v) > -1 || !CUR) history.replaceState({ v: v }, '', routeUrl(v)); else history.pushState({ v: v }, '', routeUrl(v)); }
   CUR = v; drawer(false);
   var tab = FLOW[v] || v;
   document.body.className = BARE.indexOf(v) > -1 ? 'bare' : '';
   $('app').innerHTML = (BARE.indexOf(v) > -1 ? '' : side(tab)) + '<section class="view on">' + V[v]() + '</section>' + (BARE.indexOf(v) > -1 ? '' : drawerHtml(tab));
   window.scrollTo(0, 0);
+  if (prevCur && v !== prevCur && FB_LAST_VIEW !== v) {
+    FB_LAST_VIEW = v;
+    fbTrack('PageView');
+  }
   if (AFTER[v]) AFTER[v]();
 }
 function rerender() { var y = window.scrollY; go(CUR, true); window.scrollTo(0, y); }
@@ -394,6 +436,7 @@ var LOGIN_STEP = 'phone'; // 'phone' | 'otp' | 'set_password' | 'password'
 var PENDING_PHONE = '';
 var PENDING_MEMBER = null;
 var PENDING_PAY = false;
+var PENDING_SETUP_TOKEN = '';
 var OTP_TIMER = null;
 var OTP_SECONDS = 60;
 
@@ -472,6 +515,10 @@ function doPhoneSubmit() {
       LOGIN_STEP = 'password';
       renderLogin();
       toast('পাসওয়ার্ড লিখে লগইন করুন');
+    } else if (auth && auth.verified && !auth.has_password) {
+      LOGIN_STEP = 'set_password';
+      renderLogin();
+      toast('আপনার অ্যাকাউন্ট ভেরিফাইড! লগইনের জন্য পাসওয়ার্ড সেট করুন ✓');
     } else {
       doSendOtp();
     }
@@ -537,21 +584,16 @@ function doVerifyOtp() {
   }
   busy(1);
 
-  var onOtpSuccess = function () {
+  rpc('verify_member_otp_and_grant', { p_phone: PENDING_PHONE, p_otp: enteredOtp }).then(function (r) {
     busy(0);
+    if (!r || !r.ok) {
+      return toast((r && r.err) || 'ভুল ওটিপি কোড! আপনার মোবাইলে আসা কোডটি দিন।', 1);
+    }
+    PENDING_SETUP_TOKEN = r.setup_token || '';
     clearInterval(OTP_TIMER);
     LOGIN_STEP = 'set_password';
     renderLogin();
     toast('ওটিপি যাচাই হয়েছে! এবার পাসওয়ার্ড সেট করুন ✓');
-  };
-
-  api('verify_otp', { phone: PENDING_PHONE, otp: enteredOtp }).then(function (r) {
-    busy(0);
-    if (!r.ok) {
-      return toast(r.err || 'ভুল ওটিপি কোড! আপনার মোবাইলে আসা কোডটি দিন।', 1);
-    }
-    if (r.member) PENDING_MEMBER = r.member;
-    onOtpSuccess();
   }).catch(function (e) {
     busy(0);
     toast(errMsg(e) || 'ওটিপি যাচাই করতে সমস্যা হয়েছে', 1);
@@ -569,30 +611,38 @@ function doSetPassword() {
   }
   busy(1);
   getSha256(np).then(function (hash) {
-    return rpc('set_member_password', { p_phone: PENDING_PHONE, p_password_hash: hash });
-  }).then(function () {
-    return api('me', { phone: PENDING_PHONE });
-  }).then(function (meRes) {
-    busy(0);
-    S.phone = PENDING_PHONE;
-    LS.set('eds_phone', PENDING_PHONE);
-    if (meRes && meRes.ok && meRes.member) {
-      setMember(meRes.member);
-      S.payPending = !!meRes.pending;
-    } else {
-      setMember(PENDING_MEMBER || { phone: PENDING_PHONE, status: 'new', paid: false, verified: true });
+    return rpc('set_member_password', {
+      p_phone: PENDING_PHONE,
+      p_password_hash: hash,
+      p_setup_token: PENDING_SETUP_TOKEN || null
+    });
+  }).then(function (r) {
+    if (!r || !r.ok) {
+      busy(0);
+      toast((r && r.err) || 'পাসওয়ার্ড সেট করা যায়নি, আবার ওটিপি যাচাই করুন', 1);
+      return;
     }
-    LOGIN_STEP = 'phone';
-    toast('পাসওয়ার্ড সেট ও ভেরিফিকেশন সম্পন্ন হয়েছে ✓');
-    afterLogin();
-  }).catch(function () {
+    PENDING_SETUP_TOKEN = '';
+    S.tok = r.session_token || '';
+    if (S.tok) LS.set('eds_tok', S.tok);
+    return api('me', { phone: PENDING_PHONE, tok: S.tok }).then(function (meRes) {
+      busy(0);
+      S.phone = PENDING_PHONE;
+      LS.set('eds_phone', PENDING_PHONE);
+      if (meRes && meRes.ok && meRes.member) {
+        setMember(meRes.member);
+        S.payPending = !!meRes.pending;
+      } else {
+        setMember(PENDING_MEMBER || { phone: PENDING_PHONE, status: 'new', paid: false, verified: true });
+      }
+      LOGIN_STEP = 'phone';
+      fbTrack('CompleteRegistration', { content_name: 'Member Account', status: true });
+      toast('পাসওয়ার্ড সেট ও ভেরিফিকেশন সম্পন্ন হয়েছে ✓');
+      afterLogin();
+    });
+  }).catch(function (e) {
     busy(0);
-    S.phone = PENDING_PHONE;
-    LS.set('eds_phone', PENDING_PHONE);
-    setMember(PENDING_MEMBER || { phone: PENDING_PHONE, status: 'new', paid: false, verified: true });
-    LOGIN_STEP = 'phone';
-    toast('পাসওয়ার্ড সেট সম্পন্ন হয়েছে ✓');
-    afterLogin();
+    toast(errMsg(e) || 'পাসওয়ার্ড সেট করতে সমস্যা হয়েছে, আবার চেষ্টা করুন', 1);
   });
 }
 
@@ -608,7 +658,9 @@ function doLoginPassword() {
       toast((r && r.err) || 'ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন বা রিসেট করুন', 1);
       return;
     }
-    return api('me', { phone: PENDING_PHONE }).then(function (meRes) {
+    S.tok = r.session_token || '';
+    if (S.tok) LS.set('eds_tok', S.tok);
+    return api('me', { phone: PENDING_PHONE, tok: S.tok }).then(function (meRes) {
       busy(0);
       S.phone = PENDING_PHONE;
       LS.set('eds_phone', PENDING_PHONE);
@@ -658,22 +710,93 @@ function setMember(m) {
 }
 
 // --- ৮. মেম্বারশিপ ও পেমেন্ট হিস্ট্রি ---
+function payCalc() {
+  var st = (S.c && S.c.settings) || {};
+  var base = Number(st.price) || Number(price()) || 0;
+  var rawFee = st.gateway_fee;
+  var pct = (rawFee !== undefined && rawFee !== null && String(rawFee).trim() !== '')
+    ? Math.max(0, parseFloat(rawFee) || 0)
+    : 0;
+  var fee = (base > 0 && pct > 0)
+    ? Math.ceil(Number(((base * pct) / 100).toFixed(4)))
+    : 0;
+  return { base: base, pct: pct, fee: fee, total: base + fee, days: Number(st.days) || 365 };
+}
+function refreshPaySettings(silent) {
+  return rpc('get_public_pay_settings').then(function (r) {
+    if (r && r.ok) {
+      if (!S.c) S.c = {};
+      if (!S.c.settings) S.c.settings = {};
+      var changed = (
+        String(S.c.settings.price || '') !== String(r.price) ||
+        String(S.c.settings.days || '') !== String(r.days) ||
+        String(S.c.settings.monthly || '') !== String(r.monthly) ||
+        String(S.c.settings.gateway_fee !== undefined ? S.c.settings.gateway_fee : '') !== String(r.gateway_fee)
+      );
+      S.c.settings.price = String(r.price);
+      S.c.settings.monthly = String(r.monthly);
+      S.c.settings.days = String(r.days);
+      S.c.settings.gateway_fee = String(r.gateway_fee);
+      S.c.settings.meta_pixel_id = String(r.meta_pixel_id || '');
+      if (S.c.settings.meta_pixel_id) initMetaPixel(S.c.settings.meta_pixel_id);
+      try { LS.set('eds_c3', S.c); } catch (e) {}
+      if (!silent && changed && (CUR === 'member' || CUR === 'home' || CUR === 'paid')) {
+        rerender();
+      }
+    }
+    return payCalc();
+  }).catch(function () {
+    return payCalc();
+  });
+}
 V.member = function () {
   var c = S.c || { settings: {} }, st = c.settings || {};
+  var pc = payCalc();
   var feat = [(T('tfdb31ebe', 'সব স্টাইল খোলা')), (T('t7f56b9bd', 'যত খুশি ডিজাইনের কাস্টমাইজড কমান্ড')), (T('t237c40ea', 'ডিজাইন ঠিক করার রেডি লাইন')), (T('t5a04ad75', 'নতুন স্টাইল আসলে সাথে সাথে পাবেন'))];
   var waText = (T('t823bc87c', 'আসসালামু আলাইকুম, আমি') + ' ') + APPNAME + (T('tf4fc0064', '-এর মেম্বারশিপ নিতে চাই। আমার নম্বর:') + ' ') + (S.phone || '');
-  var pay = ('<a class="btn" onclick="doPay()" style="margin-top:22px">' + T('t1dd64f9d', 'পেমেন্ট করুন · ৳')) + BN(price()) + I.arr + '</a>' +
+  var pay = ('<a class="btn" onclick="doPay()" style="margin-top:22px">' + T('t1dd64f9d', 'পেমেন্ট করুন · ৳')) + BN(pc.base) + I.arr + '</a>' +
     '<img class="epsck" src="images/eps-checkout.png" alt="Pay with EPS">' +
-    ('<p class="paynote">' + T('te835d181', 'পেমেন্ট হলেই মেম্বারশিপ নিজে থেকে চালু হবে।') + '</p>') +
+    ('<p class="paynote">' + T('te835d181', 'পেমেন্ট হলেই মেম্বারশিপ নিজে থেকে চালু হবে।') + (pc.fee > 0 ? '<span class="payfee-hint">অনলাইন পেমেন্ট গেটওয়ে চার্জ (' + BN(pc.pct) + '%) প্রযোজ্য।</span>' : '') + '</p>') +
     '<a class="wa-help" href="' + esc(wa(waText)) + '" target="_blank" rel="noopener"><i>' + I.wa + ('</i>' + T('t44d56f65', 'সমস্যা হলে WhatsApp-এ মেসেজ দিন') + '</a>');
   return wtop((T('tea80659b', 'মেম্বারশিপ'))) + '<div class="wmain">' + lback((T('tb2052257', 'ফিরে যান'))) + head((T('t05dd299b', 'পুরো বছরের ডিজাইন, *এক পেমেন্টে*', 'span')), (T('te8f6325d', 'সব স্টাইল খুলে যাবে, যত খুশি কাস্টমাইজড কমান্ড বানাতে পারবেন।'))) +
-    ('<div class="mgrid"><div class="mcard"><h3>' + T('td7b944f3', 'বার্ষিক মেম্বারশিপ') + '</h3><div class="mprice">' + T('t667044e8', '৳')) + BN(price()) + ('<small> ' + T('te4e3d29a', '/ বছর') + '</small></div><div class="mper">' + T('tbfba3042', 'মাসে মাত্র') + ' <b>' + T('t667044e8', '৳')) + BN(st.monthly || 33) + ('</b> ' + T('t0df3de41', '· প্রতিদিন মাত্র *১ টাকা*', 'b') + '</div>') +
+    ('<div class="mgrid"><div class="mcard"><h3>' + T('td7b944f3', 'বার্ষিক মেম্বারশিপ') + '</h3><div class="mprice">' + T('t667044e8', '৳')) + BN(pc.base) + ('<small> ' + T('te4e3d29a', '/ বছর') + '</small></div><div class="mper">' + T('tbfba3042', 'মাসে মাত্র') + ' <b>' + T('t667044e8', '৳')) + BN(st.monthly || Math.max(1, Math.round(pc.base / 12))) + ('</b> ' + T('t0df3de41', '· প্রতিদিন মাত্র *১ টাকা*', 'b') + '</div>') +
     '<ul class="feat">' + feat.map(function (f) { return '<li>' + I.chk + f + '</li>'; }).join('') + '</ul>' + pay + '</div>' +
     ('<div class="why"><h3>' + T('t6711ac3e', 'যা যা বানাতে পারবেন') + '</h3><p>') + ((c.cats || []).map(function (x) { return x.name; }).join(', ') || (T('tf859e237', 'প্রোডাক্ট, অফার, উৎসব'))) + ': ' + BN((c.tpls || []).length) + (T('tbd3fc74a', 'টা স্টাইল, নতুন আসছে নিয়মিত।') + '</p><div class="wsg">') + (c.tpls || []).filter(function (t) { return t.img; }).slice(0, 6).map(function (t) { return '<img src="' + esc(imgUrl(t.img)) + '" alt="">'; }).join('') + '</div></div></div>' +
     '<picture class="epsft"><source media="(min-width:900px)" srcset="images/eps-footer-desktop.png"><img src="images/eps-footer-mobile.png" alt="Pay with Visa, Mastercard, bKash, Nagad, Rocket and more — verified by EPS"></picture></div>';
 };
+AFTER.member = function () {
+  refreshPaySettings(false).then(function (pc) {
+    fbTrack('ViewContent', { content_name: 'Annual Membership', content_type: 'product', value: pc.base, currency: 'BDT' });
+  });
+};
 function doPay() {
   if (!S.phone) { S.after = 'member'; return go('login'); }
+  busy(1);
+  refreshPaySettings(true).then(function (pc) {
+    busy(0);
+    if (pc.fee > 0) {
+      var payIcon = '<svg class="i" viewBox="0 0 24 24" style="stroke-width:2"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>';
+      openSheet(
+        '<div class="sic" style="background:rgba(243,146,0,.12);border:1px solid rgba(243,146,0,.35);color:var(--or)">' + payIcon + '</div>' +
+        '<h3>পেমেন্ট নিশ্চিত করুন</h3>' +
+        '<div class="pay-sum">' +
+          '<div class="ps-row"><span>মেম্বারশিপ প্যাকেজ (' + BN(pc.days) + ' দিন)</span><b>৳' + BN(pc.base) + '</b></div>' +
+          '<div class="ps-row"><span>অনলাইন গেটওয়ে চার্জ (' + BN(pc.pct) + '%)</span><b>+৳' + BN(pc.fee) + '</b></div>' +
+          '<div class="ps-row tot"><span>সর্বমোট পরিশোধযোগ্য</span><b>৳' + BN(pc.total) + '</b></div>' +
+        '</div>' +
+        '<p class="pay-sum-note">বিকাশ, নগদ, রকেট বা কার্ড অটোমেটিক পেমেন্ট গেটওয়ে (EPS) প্রক্রিয়াকরণ ফি হিসেবে ' + BN(pc.pct) + '% চার্জ যুক্ত হয়েছে। পেমেন্ট সম্পন্ন হলেই সাথে সাথে মেম্বারশিপ চালু হবে।</p>' +
+        '<a class="btn" onclick="confirmPayStart()">৳' + BN(pc.total) + ' পরিশোধ করতে এগিয়ে যান' + I.arr + '</a>' +
+        '<a class="btn sec" style="margin-top:10px" onclick="closeSheet()">বাতিল</a>'
+      );
+      return;
+    }
+    confirmPayStart();
+  });
+}
+function confirmPayStart() {
+  closeSheet();
+  var pc = payCalc();
+  fbTrack('InitiateCheckout', { content_name: 'Annual Membership', value: pc.total, currency: 'BDT', num_items: 1 });
   busy(1);
   api('pay_start', { phone: S.phone }).then(function (r) {
     if (!r.ok) { busy(0); return toast(r.err, 1); }
@@ -693,9 +816,18 @@ function checkPaid() {
   }).catch(function (e) { busy(0); toast(errMsg(e), 1); });
 }
 V.paid = function () {
-  var m = M();
-  return '<div class="main"><div class="res"><div class="ic g">' + I.chk + ('</div><h1>' + T('tea80659b', 'মেম্বারশিপ') + ' <span style="color:var(--ok)">' + T('tb90a540c', 'চালু') + '</span> ' + T('tf942219a', 'হয়েছে') + '</h1><p>') + (m.brand ? (T('t3a906776', 'এখন থেকে সব স্টাইল খোলা। ডিজাইন শুরু করুন।')) : (T('t787cd6d8', 'পেমেন্ট সফল। এখন আপনার ব্র্যান্ড সেটআপ করে নিন, তারপর ডিজাইন শুরু।'))) + ('</p><div class="meta"><div><span>' + T('te02414be', 'প্ল্যান') + '</span>' + T('td7b944f3', 'বার্ষিক মেম্বারশিপ') + '</div><div><span>' + T('t0fce3e67', 'টাকা') + '</span>' + T('t667044e8', '৳')) + BN(price()) + ('</div><div><span>' + T('t0b41b6d2', 'মেয়াদ') + '</span>') + fmtDate(m.expiry) + (' ' + T('t1106742d', 'পর্যন্ত') + '</div></div>') +
+  var m = M(), pc = payCalc();
+  return '<div class="main"><div class="res"><div class="ic g">' + I.chk + ('</div><h1>' + T('tea80659b', 'মেম্বারশিপ') + ' <span style="color:var(--ok)">' + T('tb90a540c', 'চালু') + '</span> ' + T('tf942219a', 'হয়েছে') + '</h1><p>') + (m.brand ? (T('t3a906776', 'এখন থেকে সব স্টাইল খোলা। ডিজাইন শুরু করুন।')) : (T('t787cd6d8', 'পেমেন্ট সফল। এখন আপনার ব্র্যান্ড সেটআপ করে নিন, তারপর ডিজাইন শুরু।'))) + ('</p><div class="meta"><div><span>' + T('te02414be', 'প্ল্যান') + '</span>' + T('td7b944f3', 'বার্ষিক মেম্বারশিপ') + '</div><div><span>' + T('t0fce3e67', 'টাকা') + '</span>' + T('t667044e8', '৳')) + BN(pc.total) + ('</div><div><span>' + T('t0b41b6d2', 'মেয়াদ') + '</span>') + fmtDate(m.expiry) + (' ' + T('t1106742d', 'পর্যন্ত') + '</div></div>') +
     (m.brand ? ('<a class="btn" data-go="style">' + T('t622af877', 'ডিজাইন শুরু করুন')) + I.arr + '</a>' : ('<a class="btn" data-go="setup">' + T('td552eb86', 'ব্র্যান্ড সেটআপ করুন')) + I.arr + '</a>') + '</div></div>';
+};
+AFTER.paid = function () {
+  var m = M(), key = (S.phone || '') + '_' + (m.expiry || '');
+  if (!key || LS.get('eds_fb_last_pur') === key) return;
+  refreshPaySettings(true).then(function (pc) {
+    if (LS.get('eds_fb_last_pur') === key) return;
+    LS.set('eds_fb_last_pur', key);
+    fbTrack('Purchase', { content_name: 'Annual Membership', content_type: 'product', value: pc.total, currency: 'BDT', num_items: 1 });
+  });
 };
 
 // --- ৯. ব্র্যান্ড ও লোগো সেটআপ ---
@@ -843,7 +975,7 @@ function doSetup() {
     busy(0); if (!r.ok) return toast(r.err, 1);
     var first = !m.brand; if (s.logo) LS.set('eds_logo', s.logo); setMember(r.member); S.setup = null;
     if (isUnlocked) {
-      rpc('admin_toggle_brand_unlock', { p_phone: S.phone, p_unlocked: false }).catch(function () {});
+      rpc('lock_member_brand', { p_phone: S.phone, p_session_token: S.tok || '' }).catch(function () {});
       if (S.member) S.member.brand_unlocked = false;
     }
     go('home'); if (first) firstTime(); else toast((T('t2fdc2806', 'ব্র্যান্ড সেভ হয়েছে ✓')));
@@ -1025,12 +1157,15 @@ AFTER.logout = function () {
   openSheet('<div class="sic" style="background:rgba(240,96,106,.1);border:1px solid rgba(240,96,106,.35);color:#F0606A">' + I.out + ('</div><h3>' + T('t3117d148', 'লগআউট করবেন?') + '</h3><p>' + T('td2b63e14', 'আবার ঢুকতে মোবাইল নম্বর লাগবে। আপনার ব্র্যান্ড আর মেম্বারশিপ ঠিক থাকবে।') + '</p><a class="btn out" style="margin-top:0" onclick="doLogout()">' + T('tc2e8e6fc', 'লগআউট করুন') + '</a><a class="btn sec" onclick="closeSheet()">' + T('tca21daf1', 'বাতিল') + '</a>'));
 };
 function doLogout() {
-  ['eds_phone', 'eds_m', 'eds_logo'].forEach(LS.del);
+  if (S.tok) rpc('logout_member_session', { p_session_token: S.tok }).catch(function () {});
+  ['eds_phone', 'eds_tok', 'eds_m', 'eds_logo'].forEach(LS.del);
   S.phone = '';
+  S.tok = '';
   S.member = null;
   S.payPending = false;
   LOGIN_STEP = 'phone';
   PENDING_PHONE = '';
+  PENDING_SETUP_TOKEN = '';
   clearInterval(OTP_TIMER);
   closeSheet();
   toast(T('t8e30c14b', 'সফলভাবে লগআউট হয়েছে'));
@@ -1053,33 +1188,51 @@ function firstTime() {
 
 // --- ১৩. অ্যাপ্লিকেশন ইনিশিয়ালাইজেশন ও বুট ---
 function boot() {
-  S.c = fixImgs(LS.get('eds_c3')); S.phone = LS.get('eds_phone') || ''; S.member = LS.get('eds_m');
-  if (!S.phone) S.member = null;
+  S.c = fixImgs(LS.get('eds_c3')); S.phone = LS.get('eds_phone') || ''; S.tok = LS.get('eds_tok') || ''; S.member = LS.get('eds_m');
+  if (!S.phone || !S.tok) {
+    if (S.phone && !S.tok) { ['eds_phone', 'eds_m'].forEach(LS.del); }
+    S.phone = ''; S.tok = ''; S.member = null;
+  }
   var start = getRoute() || 'home', back = /[?&]pay=back/.test(location.search), backFail = /[?&]st=fail/.test(location.search);
   if (back) { try { history.replaceState(null, '', routeUrl('home')); } catch (e) {} start = 'home'; }
     var entry = '';
   if (start === 'checkout') { entry = 'checkout'; start = 'home'; }
   if (['terms', 'privacy', 'refund'].indexOf(start) > -1) { S.policy = start; start = 'policy'; }
   else if (!V[start] || ['ready', 'write', 'wait', 'paid', 'logout', 'setup', 'policy'].indexOf(start) > -1) start = 'home';
-  if (S.c) { go(start); if (entry === 'checkout') nav('member'); }
+  if (S.c) {
+    if (S.c.settings && S.c.settings.meta_pixel_id) initMetaPixel(S.c.settings.meta_pixel_id);
+    go(start); if (entry === 'checkout') nav('member');
+  }
+  refreshPaySettings(false);
   api('content').then(function (r) {
     if (!r.ok) return toast((T('t9cfa3898', 'সার্ভার:') + ' ') + (r.err || (T('t63de2ba5', 'কন্টেন্ট আসেনি'))), 1);
     var first = !S.c; r = fixImgs(r); S.c = r; TX = r.texts || {}; LS.set('eds_c3', r); if (first && !CUR) { go(start); if (entry === 'checkout') nav('member'); } else if (['home', 'style', 'guide', 'member', 'login', 'acct'].indexOf(CUR) > -1) rerender();
+    refreshPaySettings(false);
   }).catch(function (e) { if (!S.c) go('off'); else toast(errMsg(e), 1); });
-  if (S.phone) api('me', { phone: S.phone }).then(function (r) {
-    if (!r.ok) return; if (r.member) setMember(r.member); S.payPending = !!r.pending;
-    rpc('check_member_auth', { p_phone: S.phone }).then(function (auth) {
-      if (auth && S.member) {
-        if (auth.brand_unlocked != null) S.member.brand_unlocked = !!auth.brand_unlocked;
-        if (auth.verified != null) S.member.verified = !!auth.verified;
-        LS.set('eds_m', S.member);
+  if (S.phone && S.tok) {
+    rpc('verify_member_session', { p_phone: S.phone, p_session_token: S.tok }).then(function (sr) {
+      if (!sr || !sr.ok) {
+        ['eds_phone', 'eds_tok', 'eds_m'].forEach(LS.del);
+        S.phone = ''; S.tok = ''; S.member = null;
+        if (S.c) rerender();
+        return;
       }
-      if (S.c && ['home', 'style', 'acct', 'member', 'guide', 'setup'].indexOf(CUR) > -1) rerender();
+      return api('me', { phone: S.phone, tok: S.tok }).then(function (r) {
+        if (!r || !r.ok) return; if (r.member) setMember(r.member); S.payPending = !!r.pending;
+        rpc('check_member_auth', { p_phone: S.phone }).then(function (auth) {
+          if (auth && S.member) {
+            if (auth.brand_unlocked != null) S.member.brand_unlocked = !!auth.brand_unlocked;
+            if (auth.verified != null) S.member.verified = !!auth.verified;
+            LS.set('eds_m', S.member);
+          }
+          if (S.c && ['home', 'style', 'acct', 'member', 'guide', 'setup'].indexOf(CUR) > -1) rerender();
+        }).catch(function () {});
+        if (S.c && ['home', 'style', 'acct', 'member', 'guide'].indexOf(CUR) > -1) rerender();
+        if (back) { if (r.member && r.member.paid) go('paid'); else if (backFail) { go('member'); toast((T('t5c67b0ef', 'পেমেন্ট হয়নি, টাকা কাটা হয়নি। আবার চেষ্টা করতে পারেন।')), 1); } else go('wait'); return; }
+        if (r.member && r.member.paid && !r.member.brand && S.c && ['home', 'member'].indexOf(CUR) > -1) go('setup');
+      });
     }).catch(function () {});
-    if (S.c && ['home', 'style', 'acct', 'member', 'guide'].indexOf(CUR) > -1) rerender();
-    if (back) { if (r.member && r.member.paid) go('paid'); else if (backFail) { go('member'); toast((T('t5c67b0ef', 'পেমেন্ট হয়নি, টাকা কাটা হয়নি। আবার চেষ্টা করতে পারেন।')), 1); } else go('wait'); return; }
-    if (r.member && r.member.paid && !r.member.brand && S.c && ['home', 'member'].indexOf(CUR) > -1) go('setup');
-  }).catch(function () {});
+  }
 }
 boot();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
