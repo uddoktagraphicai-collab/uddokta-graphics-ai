@@ -1,5 +1,5 @@
 // EDS অ্যাপ: ইনস্টল আর অফলাইনের জন্য
-var C = 'ug-v42';
+var C = 'ug-v43';
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(C).then(function (c) {
     return c.addAll([

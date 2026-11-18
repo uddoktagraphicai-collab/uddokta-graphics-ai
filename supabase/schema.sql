@@ -52,7 +52,7 @@ create table if not exists fields (
   id bigserial primary key,
   sid text not null references styles(id) on update cascade on delete cascade,
   sort int not null default 1,
-  el text not null check (el in ('headline','sub','short','bullet','offer','price','oldprice','date','badge','button','phone','address')),
+  el text not null check (el in ('product','headline','sub','short','bullet','offer','price','oldprice','date','badge','button','phone','address')),
   ex text not null default '',      -- উদাহরণ লেখা
   lim int,                          -- বাংলা অক্ষরের সীমা
   req boolean not null default false

@@ -342,9 +342,9 @@ Deno.serve(async (req: Request) => {
         fixes: (fixesList || []).map((f: any) => ({ t: f.title, line: f.line }))
       };
 
-      // Vercel / Cloudflare Edge Cache: ৫ মিনিট ক্যাশ, ১০ মিনিট পর্যন্ত stale
+      // লাইভ CMS আপডেট সাথে সাথে দেখাতে no-cache (ফ্রন্টএন্ড তাৎক্ষণিক লোডের জন্য localStorage ক্যাশ ব্যবহার করে)
       return json(resData, 200, {
-        'Cache-Control': 'public, max-age=300, stale-while-revalidate=600'
+        'Cache-Control': 'no-cache, no-store, must-revalidate'
       });
     }
 
@@ -358,7 +358,7 @@ Deno.serve(async (req: Request) => {
         }
       });
       return json({ ok: true, config: cfgRow?.data || null, t: tMap }, 200, {
-        'Cache-Control': 'public, max-age=60, stale-while-revalidate=300'
+        'Cache-Control': 'no-cache, no-store, must-revalidate'
       });
     }
 
@@ -901,7 +901,7 @@ Deno.serve(async (req: Request) => {
         const modeNote = epsCfg.mode === 'sandbox' ? 'টেস্ট (sandbox)' : '';
         const payNote = [feeNote, modeNote].filter(Boolean).join(' · ');
 
-        await supabase.from('payments').insert({
+        const { error: payInsErr } = await supabase.from('payments').insert({
           id: tx,
           phone: member.phone,
           method: 'EPS',
@@ -909,6 +909,7 @@ Deno.serve(async (req: Request) => {
           status: 'pending',
           note: payNote
         });
+        if (payInsErr) return json({ ok: false, err: 'পেমেন্ট রেকর্ড তৈরি ব্যর্থ: ' + payInsErr.message });
 
         return json({ ok: true, url: initRes.redirectUrl, basePrice, feePct, feeAmt, totalPayable });
       } catch (err: any) {
@@ -1181,7 +1182,7 @@ Deno.serve(async (req: Request) => {
           const trxCode = String(q.trx || '').trim() || ('MANUAL-' + Date.now().toString().slice(-6));
           const payId = 'tx' + Date.now() + Math.floor(Math.random() * 900 + 100);
 
-          await supabase.from('payments').insert({
+          const { error: ordErr } = await supabase.from('payments').insert({
             id: payId,
             phone: ph,
             amount: amount,
@@ -1192,6 +1193,7 @@ Deno.serve(async (req: Request) => {
             done_at: new Date().toISOString(),
             note: noteStr ? `ম্যানুয়াল মেম্বার তৈরি: ${noteStr}` : 'অ্যাডমিন দ্বারা ম্যানুয়াল মেম্বার তৈরি'
           });
+          if (ordErr) return json({ ok: false, err: 'মেম্বার তৈরি হয়েছে কিন্তু অর্ডার সেভ ব্যর্থ: ' + ordErr.message });
         }
 
         await logActivity(supabase, 'নতুন মেম্বার যুক্ত', `ফোন: ${ph} (${isPaid ? days + ' দিন পেইড' + (amount > 0 ? ', ৳' + amount : '') : 'নতুন'})`);
@@ -1226,10 +1228,18 @@ Deno.serve(async (req: Request) => {
         if (s.brand !== undefined) updatePayload.brand = String(s.brand).trim();
         if (s.tagline !== undefined) updatePayload.tagline = String(s.tagline).trim();
         if (s.biz !== undefined) updatePayload.biz = String(s.biz).trim();
-        if (s.c1 !== undefined) updatePayload.c1 = String(s.c1).trim();
-        if (s.c2 !== undefined) updatePayload.c2 = String(s.c2).trim();
-        if (s.c3 !== undefined) updatePayload.c3 = String(s.c3).trim();
-        if (s.shape !== undefined) updatePayload.shape = String(s.shape).trim();
+        const hexNorm = (v: any) => {
+          const x = String(v || '').trim();
+          return /^#[0-9A-Fa-f]{6}$/.test(x) ? x.toUpperCase() : '';
+        };
+        const shapeMap: Record<string, string> = {
+          wide: 'wide', square: 'square', tall: 'tall',
+          'চওড়া': 'wide', 'চৌকো': 'square', 'লম্বা': 'tall'
+        };
+        if (s.c1 !== undefined) updatePayload.c1 = hexNorm(s.c1);
+        if (s.c2 !== undefined) updatePayload.c2 = hexNorm(s.c2);
+        if (s.c3 !== undefined) updatePayload.c3 = hexNorm(s.c3);
+        if (s.shape !== undefined) updatePayload.shape = shapeMap[String(s.shape).trim()] || 'square';
         if (s.logo_url !== undefined) updatePayload.logo_url = String(s.logo_url).trim();
         if (s.verified !== undefined) updatePayload.verified = Boolean(s.verified);
         if (s.brand_unlocked !== undefined) updatePayload.brand_unlocked = Boolean(s.brand_unlocked);
@@ -1307,6 +1317,8 @@ Deno.serve(async (req: Request) => {
         await supabase.from('payments').delete().eq('phone', mPhone);
         await supabase.from('design_history').delete().eq('phone', mPhone);
         await supabase.from('otp_codes').delete().eq('phone', mPhone);
+        await supabase.from('member_sessions').delete().eq('phone', mPhone);
+        await supabase.from('otp_verified_tokens').delete().eq('phone', mPhone);
 
         // ২. ক্লাউডিনারি লোগো থাকলে মুছে ফেলা
         if (memRow.logo_url && memRow.logo_url.includes('res.cloudinary.com')) {
@@ -1355,10 +1367,11 @@ Deno.serve(async (req: Request) => {
         const newExpiry = addDays(baseDate, packageDays);
 
         if (mem) {
-          await supabase.from('members').update({
+          const { error: memUpErr } = await supabase.from('members').update({
             status: 'paid',
             expiry: newExpiry
           }).eq('phone', payRow.phone);
+          if (memUpErr) return json({ ok: false, err: 'মেম্বারশিপ সক্রিয় ব্যর্থ: ' + memUpErr.message });
         }
 
         const manualTrx = payRow.trx || ('MANUAL-' + Date.now().toString().slice(-6));
@@ -1419,10 +1432,11 @@ Deno.serve(async (req: Request) => {
           const today = todayDhaka();
           const baseDate = mem.expiry && mem.expiry > today && (mem.status === 'paid' || mem.status === 'পেইড') ? mem.expiry : today;
           const newExpiry = addDays(baseDate, extendDays);
-          await supabase.from('members').update({
+          const { error: memUpErr } = await supabase.from('members').update({
             status: 'paid',
             expiry: newExpiry
           }).eq('phone', ph);
+          if (memUpErr) return json({ ok: false, err: 'পেমেন্ট সেভ হয়েছে কিন্তু মেয়াদ আপডেট ব্যর্থ: ' + memUpErr.message });
         }
 
         await logActivity(supabase, 'ম্যানুয়াল পেমেন্ট এন্ট্রি', `ফোন: ${ph}, টাকা: ৳${amount}, মাধ্যম: ${method}`);
@@ -1548,6 +1562,27 @@ Deno.serve(async (req: Request) => {
         return json(out);
       }
 
+      const toBool = (v: any): boolean => v === true || v === 'TRUE' || v === 'true' || v === 1 || v === '1';
+      const LOGO_POS_MAP: Record<string, string> = {
+        'top-left': 'top-left',
+        'top-center': 'top-center',
+        'top-right': 'top-right',
+        'bottom-left': 'bottom-left',
+        'bottom-center': 'bottom-center',
+        'bottom-right': 'bottom-right',
+        'উপরে বামে': 'top-left',
+        'উপরে মাঝে': 'top-center',
+        'উপরে ডানে': 'top-right',
+        'নিচে বামে': 'bottom-left',
+        'নিচে মাঝে': 'bottom-center',
+        'নিচে ডানে': 'bottom-right'
+      };
+      const normLogoPos = (v: any): string => LOGO_POS_MAP[String(v || '').trim()] || 'top-left';
+      const ALLOWED_FIELD_ELS = new Set([
+        'product', 'headline', 'sub', 'short', 'bullet', 'offer',
+        'price', 'oldprice', 'date', 'badge', 'button', 'phone', 'address'
+      ]);
+
       if (action === 'a_save') {
         const tab = q.tab;
         const rows = q.rows || [];
@@ -1563,7 +1598,8 @@ Deno.serve(async (req: Request) => {
 
           for (const r of rows) {
             if (r.key) {
-              await supabase.from('settings').upsert({ key: r.key, value: r.value || '' });
+              const { error: uErr } = await supabase.from('settings').upsert({ key: r.key, value: r.value || '' }, { onConflict: 'key' });
+              if (uErr) return json({ ok: false, err: 'সেটিংস সেভ ব্যর্থ: ' + uErr.message });
             }
           }
 
@@ -1591,12 +1627,14 @@ Deno.serve(async (req: Request) => {
           const toUpsert = cleanRows.filter((r: any) => r.value !== '');
           const toDelete = cleanRows.filter((r: any) => r.value === '').map((r: any) => r.key);
           if (toDelete.length > 0) {
-            await supabase.from('texts').delete().in('key', toDelete);
+            const { error: dErr } = await supabase.from('texts').delete().in('key', toDelete);
+            if (dErr) return json({ ok: false, err: 'লেখা রিসেট ব্যর্থ: ' + dErr.message });
           }
           if (toUpsert.length > 0) {
             for (let i = 0; i < toUpsert.length; i += 100) {
               const chunk = toUpsert.slice(i, i + 100);
-              await supabase.from('texts').upsert(chunk, { onConflict: 'key' });
+              const { error: uErr } = await supabase.from('texts').upsert(chunk, { onConflict: 'key' });
+              if (uErr) return json({ ok: false, err: 'লেখা সেভ ব্যর্থ: ' + uErr.message });
             }
           }
           await logActivity(supabase, 'অ্যাপের লেখা আপডেট', `${toUpsert.length}টি লেখা আপডেট করা হয়েছে`);
@@ -1604,84 +1642,122 @@ Deno.serve(async (req: Request) => {
         }
 
         if (tab === 'contact') {
-          await supabase.from('contact').delete().neq('key', '___none___');
           const cleanRows = rows
             .filter((r: any) => r && r.key)
-            .map((r: any) => ({ key: r.key, value: String(r.value || '').trim() }));
+            .map((r: any) => ({ key: String(r.key).trim(), value: String(r.value || '').trim() }));
+          const { data: existing } = await supabase.from('contact').select('key');
           if (cleanRows.length > 0) {
-            await supabase.from('contact').insert(cleanRows);
+            const { error: uErr } = await supabase.from('contact').upsert(cleanRows, { onConflict: 'key' });
+            if (uErr) return json({ ok: false, err: 'যোগাযোগ সেভ ব্যর্থ: ' + uErr.message });
+          }
+          const keep = new Set(cleanRows.map((r: any) => r.key));
+          const toRemove = (existing || []).map((r: any) => r.key).filter((k: string) => !keep.has(k));
+          if (toRemove.length > 0) {
+            const { error: dErr } = await supabase.from('contact').delete().in('key', toRemove);
+            if (dErr) return json({ ok: false, err: 'যোগাযোগ আপডেট ব্যর্থ: ' + dErr.message });
           }
           await logActivity(supabase, 'গাইড ও যোগাযোগ আপডেট', `${cleanRows.length}টি যোগাযোগ ফিল্ড সেভ করা হয়েছে`);
           return json({ ok: true });
         }
 
         if (tab === 'policies') {
-          await supabase.from('policies').delete().neq('key', '___none___');
           const cleanRows = rows
             .filter((r: any) => r && r.key && r.title)
             .map((r: any, idx: number) => ({
-              key: r.key,
-              title: r.title,
+              key: String(r.key).trim(),
+              title: String(r.title).trim(),
               text: r.text || '',
               sort: Number(r.order || r.sort) || idx + 1
             }));
+          const { data: existing } = await supabase.from('policies').select('key');
           if (cleanRows.length > 0) {
-            await supabase.from('policies').insert(cleanRows);
+            const { error: uErr } = await supabase.from('policies').upsert(cleanRows, { onConflict: 'key' });
+            if (uErr) return json({ ok: false, err: 'পলিসি সেভ ব্যর্থ: ' + uErr.message });
+          }
+          const keep = new Set(cleanRows.map((r: any) => r.key));
+          const toRemove = (existing || []).map((r: any) => r.key).filter((k: string) => !keep.has(k));
+          if (toRemove.length > 0) {
+            const { error: dErr } = await supabase.from('policies').delete().in('key', toRemove);
+            if (dErr) return json({ ok: false, err: 'পলিসি ডিলিট ব্যর্থ: ' + dErr.message });
           }
           await logActivity(supabase, 'পলিসি ও শর্তাবলি আপডেট', `${cleanRows.length}টি পলিসি সেভ করা হয়েছে`);
           return json({ ok: true });
         }
 
         if (tab === 'biz') {
-          await supabase.from('biz').delete().neq('name', '___none___');
           const cleanRows = rows
             .filter((r: any) => r && r.name)
             .map((r: any, idx: number) => ({
-              name: r.name,
+              name: String(r.name).trim(),
               mood: r.mood || '',
               sort: Number(r.order || r.sort) || idx + 1
             }));
+          const { data: existing } = await supabase.from('biz').select('name');
           if (cleanRows.length > 0) {
-            await supabase.from('biz').insert(cleanRows);
+            const { error: uErr } = await supabase.from('biz').upsert(cleanRows, { onConflict: 'name' });
+            if (uErr) return json({ ok: false, err: 'ব্যবসার ধরন সেভ ব্যর্থ: ' + uErr.message });
+          }
+          const keep = new Set(cleanRows.map((r: any) => r.name));
+          const toRemove = (existing || []).map((r: any) => r.name).filter((n: string) => !keep.has(n));
+          if (toRemove.length > 0) {
+            const { error: dErr } = await supabase.from('biz').delete().in('name', toRemove);
+            if (dErr) return json({ ok: false, err: 'ব্যবসার ধরন ডিলিট ব্যর্থ: ' + dErr.message });
           }
           await logActivity(supabase, 'ব্যবসার ধরন আপডেট', `${cleanRows.length}টি ব্যবসার ধরন সেভ করা হয়েছে`);
           return json({ ok: true });
         }
 
         if (tab === 'cats') {
-          await supabase.from('cats').delete().neq('id', '___none___');
+          // নিরাপদ upsert + শুধু বাদ পড়া ক্যাটাগরি ডিলিট (যাতে styles.cat FK ON DELETE SET NULL ট্রিগার না হয়)
           const cleanRows = rows
             .filter((r: any) => r && r.id && r.name)
             .map((r: any, idx: number) => ({
-              id: r.id,
-              name: r.name,
-              show: r.show === true || r.show === 'TRUE' || r.show === 'true',
+              id: String(r.id).trim(),
+              name: String(r.name).trim(),
+              show: toBool(r.show),
               sort: Number(r.order || r.sort) || idx + 1
             }));
+          const { data: existing } = await supabase.from('cats').select('id');
           if (cleanRows.length > 0) {
-            await supabase.from('cats').insert(cleanRows);
+            const { error: uErr } = await supabase.from('cats').upsert(cleanRows, { onConflict: 'id' });
+            if (uErr) return json({ ok: false, err: 'ক্যাটাগরি সেভ ব্যর্থ: ' + uErr.message });
+          }
+          const keep = new Set(cleanRows.map((r: any) => r.id));
+          const toRemove = (existing || []).map((r: any) => r.id).filter((cid: string) => !keep.has(cid));
+          if (toRemove.length > 0) {
+            const { error: dErr } = await supabase.from('cats').delete().in('id', toRemove);
+            if (dErr) return json({ ok: false, err: 'ক্যাটাগরি ডিলিট ব্যর্থ: ' + dErr.message });
           }
           await logActivity(supabase, 'ক্যাটাগরি আপডেট', `${cleanRows.length}টি ক্যাটাগরি সেভ করা হয়েছে`);
           return json({ ok: true });
         }
 
         if (tab === 'posts') {
-          // পুরনো পোস্টের ছবিগুলো সংগ্রহ করা
-          const { data: oldPosts } = await supabase.from('posts').select('img');
+          // পুরনো পোস্টের পূর্ণ ব্যাকআপ নেওয়া যাতে ইনসার্ট ব্যর্থ হলে ডেটা না হারায়
+          const { data: oldPosts } = await supabase.from('posts').select('sort,img,tag,title,link,show');
 
-          await supabase.from('posts').delete().gte('id', 0);
           const cleanRows = rows
             .filter((r: any) => r && r.title)
             .map((r: any, idx: number) => ({
-              title: r.title,
+              title: String(r.title).trim(),
               img: r.img || '',
               tag: r.tag || '',
               link: r.link || '',
-              show: r.show === true || r.show === 'TRUE' || r.show === 'true',
+              show: toBool(r.show),
               sort: Number(r.order || r.sort) || idx + 1
             }));
+
+          const { error: delErr } = await supabase.from('posts').delete().gte('id', 0);
+          if (delErr) return json({ ok: false, err: 'পোস্ট আপডেট ব্যর্থ: ' + delErr.message });
+
           if (cleanRows.length > 0) {
-            await supabase.from('posts').insert(cleanRows);
+            const { error: insErr } = await supabase.from('posts').insert(cleanRows);
+            if (insErr) {
+              if (oldPosts && oldPosts.length > 0) {
+                try { await supabase.from('posts').insert(oldPosts); } catch {}
+              }
+              return json({ ok: false, err: 'পোস্ট সেভ ব্যর্থ: ' + insErr.message });
+            }
           }
 
           // পুরনো যেসব ছবি নতুন তালিকায় আর নেই, সেগুলো ক্লাউডিনারি থেকে মুছে ফেলা
@@ -1706,16 +1782,26 @@ Deno.serve(async (req: Request) => {
         }
 
         if (tab === 'fixes') {
-          await supabase.from('fixes').delete().gte('id', 0);
+          const { data: oldFixes } = await supabase.from('fixes').select('sort,title,line');
           const cleanRows = rows
             .filter((r: any) => r && r.title)
             .map((r: any, idx: number) => ({
-              title: r.title,
+              title: String(r.title).trim(),
               line: r.line || '',
               sort: Number(r.order || r.sort) || idx + 1
             }));
+
+          const { error: delErr } = await supabase.from('fixes').delete().gte('id', 0);
+          if (delErr) return json({ ok: false, err: 'ঠিক করার লাইন আপডেট ব্যর্থ: ' + delErr.message });
+
           if (cleanRows.length > 0) {
-            await supabase.from('fixes').insert(cleanRows);
+            const { error: insErr } = await supabase.from('fixes').insert(cleanRows);
+            if (insErr) {
+              if (oldFixes && oldFixes.length > 0) {
+                try { await supabase.from('fixes').insert(oldFixes); } catch {}
+              }
+              return json({ ok: false, err: 'ঠিক করার লাইন সেভ ব্যর্থ: ' + insErr.message });
+            }
           }
           await logActivity(supabase, 'ঠিক করার লাইন আপডেট', `${cleanRows.length}টি লাইন সেভ করা হয়েছে`);
           return json({ ok: true });
@@ -1726,19 +1812,41 @@ Deno.serve(async (req: Request) => {
 
       if (action === 'a_style_save') {
         const st = q.style || {};
-        const id = String(st.id || '').replace(/\s+/g, '-');
+        const id = String(st.id || '').trim().replace(/\s+/g, '-');
+        const oldId = String(q.oldId || '').trim();
         if (!id) return json({ ok: false, err: 'স্টাইলের ID দিন' });
         if (!String(st.name || '').trim()) return json({ ok: false, err: 'স্টাইলের নাম দিন' });
 
-        // পুরনো স্টাইলের ইমেজ চেক (যদি একই আইডিতে নতুন ছবি আপলোড হয় অথবা আইডি বদলানো হয়)
-        const checkId = q.oldId || id;
-        const { data: oldStyleRecord } = await supabase.from('styles').select('img').eq('id', checkId).single();
+        // ফিল্ডগুলো আগে ভ্যালিডেট করা
+        const rawFields = Array.isArray(q.fields) ? q.fields : [];
+        const fields = rawFields.map((f: any, idx: number) => {
+          const el = String(f.el || '').trim();
+          return {
+            sid: id,
+            sort: idx + 1,
+            el,
+            ex: String(f.ex || ''),
+            lim: f.lim ? Number(f.lim) : null,
+            req: toBool(f.req)
+          };
+        });
+        for (const f of fields) {
+          if (!ALLOWED_FIELD_ELS.has(f.el)) {
+            return json({ ok: false, err: `অবৈধ এলিমেন্ট টাইপ: "${f.el}"` });
+          }
+        }
+
+        // পুরনো স্টাইল রেকর্ড চেক (ইমেজ ও sort সংরক্ষণের জন্য)
+        const checkId = oldId || id;
+        const { data: oldStyleRecord } = await supabase.from('styles').select('id,img,sort').eq('id', checkId).maybeSingle();
         const oldImg = oldStyleRecord?.img;
 
-        // যদি পূর্ববর্তী ID আলাদা হয়, তবে পুরনো স্টাইল ডিলিট করা
-        if (q.oldId && q.oldId !== id) {
-          await supabase.from('styles').delete().eq('id', q.oldId);
-          await supabase.from('fields').delete().eq('sid', q.oldId);
+        // নতুন স্টাইল হলে পরবর্তী sort সংখ্যা নির্ধারণ
+        let sortVal = oldStyleRecord?.sort;
+        if (sortVal == null) {
+          const { data: maxRows } = await supabase.from('styles').select('sort').order('sort', { ascending: false }).limit(1);
+          const maxSort = (maxRows && maxRows[0] && Number(maxRows[0].sort)) || 0;
+          sortVal = maxSort + 1;
         }
 
         const rawStatus = String(st.status || 'draft').toLowerCase();
@@ -1746,33 +1854,45 @@ Deno.serve(async (req: Request) => {
 
         const styleRow = {
           id,
-          name: st.name,
-          cat: st.cat,
+          name: String(st.name).trim(),
+          cat: st.cat ? String(st.cat).trim() : null,
           img: st.img || '',
           attach: st.attach || '',
-          logo: st.logo || 'top-left',
+          logo: normLogoPos(st.logo),
           style: st.style || '',
           status: mappedStatus,
-          pop: st.pop === true || st.pop === 'TRUE' || st.pop === 'true',
+          pop: toBool(st.pop),
+          sort: sortVal,
           font1: st.font1 || '',
           font2: st.font2 || ''
         };
 
-        await supabase.from('styles').upsert(styleRow);
+        // ID পরিবর্তন হলে নিরাপদে rename করা (ON UPDATE CASCADE)
+        if (oldId && oldId !== id) {
+          const { data: conflict } = await supabase.from('styles').select('id').eq('id', id).maybeSingle();
+          if (conflict) {
+            return json({ ok: false, err: `"${id}" ID দিয়ে আরেকটি স্টাইল ইতিমধ্যে আছে` });
+          }
+          const { error: renErr } = await supabase.from('styles').update(styleRow).eq('id', oldId);
+          if (renErr) return json({ ok: false, err: 'স্টাইল আপডেট ব্যর্থ: ' + renErr.message });
+        } else {
+          const { error: stErr } = await supabase.from('styles').upsert(styleRow, { onConflict: 'id' });
+          if (stErr) return json({ ok: false, err: 'স্টাইল সেভ ব্যর্থ: ' + stErr.message });
+        }
 
-        // ফিল্ডস আপডেট
-        await supabase.from('fields').delete().eq('sid', id);
-        const fields = (q.fields || []).map((f: any, idx: number) => ({
-          sid: id,
-          sort: idx + 1,
-          el: f.el,
-          ex: f.ex || '',
-          lim: f.lim ? Number(f.lim) : null,
-          req: Boolean(f.req)
-        }));
+        // ফিল্ডস নিরাপদে আপডেট (ব্যর্থ হলে পুরনো ফিল্ড রিস্টোর)
+        const { data: prevFields } = await supabase.from('fields').select('sid,sort,el,ex,lim,req').eq('sid', id);
+        const { error: fDelErr } = await supabase.from('fields').delete().eq('sid', id);
+        if (fDelErr) return json({ ok: false, err: 'এলিমেন্ট আপডেট ব্যর্থ: ' + fDelErr.message });
 
         if (fields.length) {
-          await supabase.from('fields').insert(fields);
+          const { error: fInsErr } = await supabase.from('fields').insert(fields);
+          if (fInsErr) {
+            if (prevFields && prevFields.length > 0) {
+              try { await supabase.from('fields').insert(prevFields); } catch {}
+            }
+            return json({ ok: false, err: 'এলিমেন্ট সেভ ব্যর্থ: ' + fInsErr.message });
+          }
         }
 
         // যদি ছবি পরিবর্তন করা হয়ে থাকে এবং আগের ছবিটি ক্লাউডিনারির হয়, তবে আগেরটি ক্লাউডিনারি থেকে মুছে ফেলা
@@ -1788,8 +1908,9 @@ Deno.serve(async (req: Request) => {
       }
 
       if (action === 'a_style_del') {
-        const { data: styleToDelete } = await supabase.from('styles').select('img').eq('id', q.id).single();
-        await supabase.from('styles').delete().eq('id', q.id);
+        const { data: styleToDelete } = await supabase.from('styles').select('img').eq('id', q.id).maybeSingle();
+        const { error: dErr } = await supabase.from('styles').delete().eq('id', q.id);
+        if (dErr) return json({ ok: false, err: 'স্টাইল মুছতে ব্যর্থ: ' + dErr.message });
         await supabase.from('fields').delete().eq('sid', q.id);
 
         // স্টাইলের সাথে থাকা ক্লাউডিনারি ইমেজ ক্লাউডিনারি থেকে ডিলিট করা
@@ -1811,7 +1932,8 @@ Deno.serve(async (req: Request) => {
 
         if (op === 'delete') {
           const { data: stylesToDelete } = await supabase.from('styles').select('img').in('id', ids);
-          await supabase.from('styles').delete().in('id', ids);
+          const { error: bErr } = await supabase.from('styles').delete().in('id', ids);
+          if (bErr) return json({ ok: false, err: 'বাল্ক ডিলিট ব্যর্থ: ' + bErr.message });
           await supabase.from('fields').delete().in('sid', ids);
 
           // নির্বাচিত স্টাইলগুলোর ক্লাউডিনারি ইমেজ স্বয়ংক্রিয়ভাবে মুছে ফেলা
@@ -1826,15 +1948,20 @@ Deno.serve(async (req: Request) => {
             }
           }
         } else if (op === 'publish') {
-          await supabase.from('styles').update({ status: 'published' }).in('id', ids);
+          const { error: bErr } = await supabase.from('styles').update({ status: 'published' }).in('id', ids);
+          if (bErr) return json({ ok: false, err: 'পাবলিশ ব্যর্থ: ' + bErr.message });
         } else if (op === 'draft') {
-          await supabase.from('styles').update({ status: 'draft' }).in('id', ids);
+          const { error: bErr } = await supabase.from('styles').update({ status: 'draft' }).in('id', ids);
+          if (bErr) return json({ ok: false, err: 'ড্রাফট ব্যর্থ: ' + bErr.message });
         } else if (op === 'pop') {
-          await supabase.from('styles').update({ pop: true }).in('id', ids);
+          const { error: bErr } = await supabase.from('styles').update({ pop: true }).in('id', ids);
+          if (bErr) return json({ ok: false, err: 'আপডেট ব্যর্থ: ' + bErr.message });
         } else if (op === 'unpop') {
-          await supabase.from('styles').update({ pop: false }).in('id', ids);
+          const { error: bErr } = await supabase.from('styles').update({ pop: false }).in('id', ids);
+          if (bErr) return json({ ok: false, err: 'আপডেট ব্যর্থ: ' + bErr.message });
         } else if (op === 'cat' && q.cat) {
-          await supabase.from('styles').update({ cat: q.cat }).in('id', ids);
+          const { error: bErr } = await supabase.from('styles').update({ cat: q.cat }).in('id', ids);
+          if (bErr) return json({ ok: false, err: 'ক্যাটাগরি পরিবর্তন ব্যর্থ: ' + bErr.message });
         }
 
         await logActivity(supabase, 'স্টাইল বাল্ক অ্যাকশন', `অ্যাকশন: ${op}, মোট: ${ids.length}টি স্টাইল`);
@@ -1844,7 +1971,8 @@ Deno.serve(async (req: Request) => {
       if (action === 'a_style_order') {
         const ids = q.ids || [];
         for (let i = 0; i < ids.length; i++) {
-          await supabase.from('styles').update({ sort: i + 1 }).eq('id', ids[i]);
+          const { error: oErr } = await supabase.from('styles').update({ sort: i + 1 }).eq('id', ids[i]);
+          if (oErr) return json({ ok: false, err: 'ক্রম পরিবর্তন ব্যর্থ: ' + oErr.message });
         }
         await logActivity(supabase, 'স্টাইল ক্রম পরিবর্তন', `${ids.length}টি স্টাইলের ক্রম সাজানো হয়েছে`);
         return json({ ok: true });
@@ -1912,7 +2040,8 @@ Deno.serve(async (req: Request) => {
 
         for (const k in map) {
           if (e[k]) {
-            await supabase.from('settings').upsert({ key: map[k], value: String(e[k]).trim() });
+            const { error: uErr } = await supabase.from('settings').upsert({ key: map[k], value: String(e[k]).trim() }, { onConflict: 'key' });
+            if (uErr) return json({ ok: false, err: 'EPS তথ্য সেভ ব্যর্থ: ' + uErr.message });
           }
         }
         clearEpsTokenCache();
@@ -1948,7 +2077,8 @@ Deno.serve(async (req: Request) => {
 
         for (const k in map) {
           if (c[k]) {
-            await supabase.from('settings').upsert({ key: map[k], value: String(c[k]).trim() });
+            const { error: uErr } = await supabase.from('settings').upsert({ key: map[k], value: String(c[k]).trim() }, { onConflict: 'key' });
+            if (uErr) return json({ ok: false, err: 'Cloudinary তথ্য সেভ ব্যর্থ: ' + uErr.message });
           }
         }
         await logActivity(supabase, 'Cloudinary কনফিগারেশন আপডেট', `ক্লাউড: ${c.cloudName || ''} কনফিগারেশন সেভ করা হয়েছে`);
@@ -1985,7 +2115,8 @@ Deno.serve(async (req: Request) => {
 
         for (const k in map) {
           if (s[k] !== undefined && s[k] !== null && s[k] !== '') {
-            await supabase.from('settings').upsert({ key: map[k], value: String(s[k]).trim() });
+            const { error: uErr } = await supabase.from('settings').upsert({ key: map[k], value: String(s[k]).trim() }, { onConflict: 'key' });
+            if (uErr) return json({ ok: false, err: 'SMS সেটিংস সেভ ব্যর্থ: ' + uErr.message });
           }
         }
         await logActivity(supabase, 'BulkSMSBD কনফিগারেশন আপডেট', `Sender ID: ${s.senderId || ''}, API Key ও টেমপ্লেট সেভ করা হয়েছে`);
@@ -2035,12 +2166,12 @@ Deno.serve(async (req: Request) => {
         }
 
         const { data: pRow } = await supabase.from('settings').select('value').eq('key', 'admin_password').single();
-        const currentPass = pRow?.value || Deno.env.get('ADMIN_PASSWORD') || 'admin1234';
+        const currentPass = pRow?.value || Deno.env.get('ADMIN_PASSWORD') || '';
         const adminSecret = Deno.env.get('ADMIN_PASSWORD_HASH') || '';
         const oldHash = await sha256Hex(oldPass);
 
-        const oldMatches = oldPass && (
-          oldPass === currentPass ||
+        const oldMatches = Boolean(oldPass) && (
+          (currentPass && oldPass === currentPass) ||
           (adminSecret && (oldPass === adminSecret || oldHash === adminSecret.toLowerCase()))
         );
 
@@ -2048,7 +2179,8 @@ Deno.serve(async (req: Request) => {
           return json({ ok: false, err: 'বর্তমান পাসওয়ার্ড মেলেনি' });
         }
 
-        await supabase.from('settings').upsert({ key: 'admin_password', value: newPass });
+        const { error: pErr } = await supabase.from('settings').upsert({ key: 'admin_password', value: newPass }, { onConflict: 'key' });
+        if (pErr) return json({ ok: false, err: 'পাসওয়ার্ড পরিবর্তন ব্যর্থ: ' + pErr.message });
         await logActivity(supabase, 'অ্যাডমিন পাসওয়ার্ড পরিবর্তন', 'অ্যাডমিন প্যানেলের পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে');
         return json({ ok: true });
       }
@@ -2066,16 +2198,21 @@ Deno.serve(async (req: Request) => {
 
         const { error } = await supabase
           .from('landing_config')
-          .upsert({ id: 'main', data: config, updated_at: new Date().toISOString() });
+          .upsert({ id: 'main', data: config, updated_at: new Date().toISOString() }, { onConflict: 'id' });
 
         if (error) return json({ ok: false, err: error.message });
+
+        const { error: stMirrorErr } = await supabase
+          .from('settings')
+          .upsert({ key: 'landing_config', value: JSON.stringify(config) }, { onConflict: 'key' });
+        if (stMirrorErr) return json({ ok: false, err: stMirrorErr.message });
 
         await logActivity(supabase, 'ল্যান্ডিং পেজ কন্ট্রোল (CMS)', 'ল্যান্ডিং পেজের সেকশন ও কনটেন্ট পরিবর্তন করা হয়েছে');
         return json({ ok: true });
       }
 
       if (action === 'a_reset_test_data') {
-        const { data, error } = await supabase.rpc('admin_reset_test_data');
+        const { data, error } = await supabase.rpc('admin_reset_test_data', { p_tok: tok });
         if (error) return json({ ok: false, err: error.message });
         return json(data || { ok: true, message: 'সব টেস্ট ডেটা সফলভাবে মুছে সিস্টেম ফ্রেশ করা হয়েছে' });
       }
@@ -2111,20 +2248,23 @@ async function verifyPayment(supabase: any, tx: string) {
   if (statusStr === 'success') {
     const { data: mem } = await supabase.from('members').select('*').eq('phone', p.phone).single();
     const today = todayDhaka();
+    const pkgDays = Number(stMap.days) || 365;
     const baseDate = mem?.expiry && mem.expiry > today && (mem.status === 'paid' || mem.status === 'পেইড') ? mem.expiry : today;
-    const newExpiry = addDays(baseDate, 365);
+    const newExpiry = addDays(baseDate, pkgDays);
 
-    await supabase.from('members').update({
+    const { error: mErr } = await supabase.from('members').update({
       expiry: newExpiry,
       status: 'paid'
     }).eq('phone', p.phone);
+    if (mErr) return { ok: false, err: 'মেম্বারশিপ আপডেট ব্যর্থ: ' + mErr.message };
 
-    await supabase.from('payments').update({
+    const { error: pErr } = await supabase.from('payments').update({
       status: 'success',
       trx: res.EpsTransactionId || res.EPSTransactionId || '',
       method: res.FinancialEntity || 'EPS',
       done_at: new Date().toISOString()
     }).eq('id', tx);
+    if (pErr) return { ok: false, err: 'পেমেন্ট স্ট্যাটাস আপডেট ব্যর্থ: ' + pErr.message };
 
     return { ok: true, status: 'success' };
   } else if (/fail|cancel|declin|expire|reject/.test(statusStr)) {
