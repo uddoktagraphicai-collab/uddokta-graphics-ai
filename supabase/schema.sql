@@ -1251,7 +1251,7 @@ create or replace function public.verify_member_otp_and_grant(p_phone text, p_ot
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = public, extensions, pg_temp
 as $$
 declare
   v_raw text;

@@ -648,7 +648,7 @@ function doVerifyOtp() {
   rpc('verify_member_otp_and_grant', { p_phone: PENDING_PHONE, p_otp: enteredOtp }).then(function (r) {
     busy(0);
     if (!r || !r.ok) {
-      return toast((r && r.err) || 'ভুল ওটিপি কোড! সঠিক কোডটি দিন।', 1);
+      return toast((r && r.err) || (r && r.message) || 'ভুল ওটিপি কোড! সঠিক কোডটি দিন।', 1);
     }
     PENDING_SETUP_TOKEN = r.setup_token || '';
     clearInterval(OTP_TIMER);

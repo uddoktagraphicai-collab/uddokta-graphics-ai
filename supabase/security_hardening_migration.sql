@@ -343,7 +343,7 @@ create or replace function public.verify_member_otp_and_grant(p_phone text, p_ot
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = public, extensions, pg_temp
 as $$
 declare
   v_raw text;
@@ -396,7 +396,7 @@ begin
   delete from public.otp_codes where phone = v_phone;
   delete from public.otp_verified_tokens where phone = v_phone;
 
-  v_setup_tok := 'otp_' || encode(gen_random_bytes(24), 'hex');
+  v_setup_tok := 'otp_' || encode(extensions.gen_random_bytes(24), 'hex');
   insert into public.otp_verified_tokens(token, phone, expires_at)
   values (v_setup_tok, v_phone, now() + interval '10 minutes');
 
