@@ -3,36 +3,207 @@
 //  Replaces Google Apps Script 100% with PostgreSQL + Cloudinary
 // =====================================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
 import { buildCommand, formatFieldDefs, graphemes } from './engine.ts';
 import { uploadToCloudinary, deleteFromCloudinary, extractPublicId, getCloudinaryConfig } from './cloudinary.ts';
 import { getEpsConfig, initializePayment, checkTransactionStatus, clearEpsTokenCache, getEpsToken } from './eps.ts';
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
-};
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://www.ecomdesignsolution.com',
+  'https://ecomdesignsolution.com'
+];
 
-function json(data: any, status = 200, extraHeaders: Record<string, string> = {}) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json',
-      ...extraHeaders
-    }
-  });
+function getAllowedOrigins(): string[] {
+  const envRaw = Deno.env.get('ALLOWED_ORIGINS') || '';
+  const fromEnv = envRaw
+    .split(',')
+    .map((s) => s.trim().replace(/\/+$/, ''))
+    .filter((s) => s && !s.includes('yourclientdomain.com'));
+  return Array.from(new Set([...DEFAULT_ALLOWED_ORIGINS, ...fromEnv]));
 }
 
-function html(content: string, status = 200) {
-  return new Response(content, {
-    status,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'text/html; charset=utf-8'
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = (req.headers.get('origin') || '').trim().replace(/\/+$/, '');
+  const allowed = getAllowedOrigins();
+  const isLocalDev = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  const allowOrigin = origin && (allowed.includes(origin) || isLocalDev)
+    ? origin
+    : DEFAULT_ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Vary': 'Origin'
+  };
+}
+
+// ইন-মেমোরি স্লাইডিং উইন্ডো রেট লিমিটার (প্রতি আইসোলেটে ব্রুট-ফোর্স ও OTP বট সুরক্ষা)
+const rateBuckets = new Map<string, number[]>();
+function checkRateLimit(key: string, maxHits: number, windowMs: number): boolean {
+  const now = Date.now();
+  const cutoff = now - windowMs;
+  const arr = (rateBuckets.get(key) || []).filter((ts) => ts > cutoff);
+  if (arr.length >= maxHits) {
+    rateBuckets.set(key, arr);
+    return false;
+  }
+  arr.push(now);
+  rateBuckets.set(key, arr);
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets.entries()) {
+      if (!v.length || v[v.length - 1] < cutoff) rateBuckets.delete(k);
     }
-  });
+  }
+  return true;
+}
+
+function getClientIp(req: Request): string {
+  const xff = req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || '';
+  return (xff.split(',')[0] || 'unknown').trim().slice(0, 64);
+}
+
+function secureOtp4(): string {
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  return String(1000 + (arr[0] % 9000));
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const ea = new TextEncoder().encode(a);
+  const eb = new TextEncoder().encode(b);
+  if (ea.length !== eb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ea.length; i++) diff |= ea[i] ^ eb[i];
+  return diff === 0;
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+async function hashPasswordPbkdf2(password: string): Promise<string> {
+  const salt = new Uint8Array(16);
+  crypto.getRandomValues(salt);
+  const keyMat = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, keyMat, 256);
+  return `pbkdf2$${bytesToHex(salt)}$${bytesToHex(new Uint8Array(bits))}`;
+}
+
+async function verifyPasswordStored(password: string, stored: string): Promise<{ ok: boolean; needsUpgrade: boolean }> {
+  if (!password || !stored) return { ok: false, needsUpgrade: false };
+  if (stored.startsWith('pbkdf2$')) {
+    const parts = stored.split('$');
+    if (parts.length !== 3) return { ok: false, needsUpgrade: false };
+    const salt = hexToBytes(parts[1]);
+    const expectedHex = parts[2];
+    const keyMat = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, keyMat, 256);
+    const actualHex = bytesToHex(new Uint8Array(bits));
+    return { ok: timingSafeEqual(actualHex, expectedHex), needsUpgrade: false };
+  }
+  // Legacy 64-char SHA-256 hash (auto-upgrades to PBKDF2 on successful login)
+  if (/^[a-f0-9]{64}$/i.test(stored)) {
+    const h = await sha256Hex(password);
+    return { ok: timingSafeEqual(h, stored.toLowerCase()), needsUpgrade: true };
+  }
+  // Legacy plaintext (auto-upgrades to PBKDF2 on successful login)
+  return { ok: timingSafeEqual(password, stored), needsUpgrade: true };
+}
+
+function isSafePublicUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    const h = u.hostname.toLowerCase();
+    if (
+      h === 'localhost' ||
+      h === '127.0.0.1' ||
+      h === '::1' ||
+      h === '0.0.0.0' ||
+      h.endsWith('.local') ||
+      h.endsWith('.internal') ||
+      /^10\./.test(h) ||
+      /^192\.168\./.test(h) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||
+      /^169\.254\./.test(h)
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchAllRows(
+  supabase: any,
+  table: string,
+  orderCol?: string,
+  ascending = false,
+  maxRows = 10000
+): Promise<any[]> {
+  const pageSize = 1000;
+  const all: any[] = [];
+  for (let from = 0; from < maxRows; from += pageSize) {
+    let q = supabase.from(table).select('*');
+    if (orderCol) q = q.order(orderCol, { ascending });
+    const { data, error } = await q.range(from, from + pageSize - 1);
+    if (error || !data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < pageSize) break;
+  }
+  return all;
+}
+
+const SECRET_SETTING_KEYS = new Set([
+  'admin_password',
+  'eps_password',
+  'eps_hash_key',
+  'cloudinary_api_secret',
+  'sms_api_token',
+  'brevo_api_key'
+]);
+
+const PUBLIC_SETTING_KEYS = [
+  'price',
+  'monthly',
+  'days',
+  'gateway_fee',
+  'meta_pixel_id',
+  'site_logo',
+  'eps_checkout_banner',
+  'eps_footer_desktop',
+  'eps_footer_mobile'
+];
+
+function makeResponders(cors: Record<string, string>) {
+  return {
+    json(data: any, status = 200, extraHeaders: Record<string, string> = {}) {
+      return new Response(JSON.stringify(data), {
+        status,
+        headers: {
+          ...cors,
+          'Content-Type': 'application/json',
+          ...extraHeaders
+        }
+      });
+    },
+    html(content: string, status = 200) {
+      return new Response(content, {
+        status,
+        headers: {
+          ...cors,
+          'Content-Type': 'text/html; charset=utf-8'
+        }
+      });
+    }
+  };
 }
 
 export interface SmsConfig {
@@ -58,10 +229,125 @@ export function getSmsConfig(overrideMap?: Record<string, string>): SmsConfig {
   return { apiToken, senderId, apiUrl, otpTemplate, ready };
 }
 
+export interface BrevoConfig {
+  apiKey: string;
+  senderEmail: string;
+  senderName: string;
+  ready: boolean;
+}
+
+export function getBrevoConfig(overrideMap?: Record<string, string>): BrevoConfig {
+  const get = (k: string) =>
+    (overrideMap && (overrideMap[k.toLowerCase()] || overrideMap[k])) ||
+    Deno.env.get(k) ||
+    '';
+
+  const apiKey = get('BREVO_API_KEY');
+  const senderEmail = get('BREVO_SENDER_EMAIL');
+  const senderName = get('BREVO_SENDER_NAME') || 'উদ্যোক্তা গ্রাফিক্স AI';
+  const ready = Boolean(apiKey && !apiKey.includes('your_') && senderEmail && senderEmail.includes('@'));
+
+  return { apiKey, senderEmail, senderName, ready };
+}
+
+export async function sendBrevoEmail(
+  cfg: BrevoConfig,
+  toEmail: string,
+  otp: string,
+  isTest = false
+): Promise<{ ok: boolean; err?: string; id?: string }> {
+  if (!cfg.ready) {
+    return { ok: false, err: 'Brevo কনফিগারেশন অসম্পূর্ণ। API Key ও Sender Email চেক করুন।' };
+  }
+
+  const subject = isTest
+    ? 'উদ্যোক্তা গ্রাফিক্স AI — Brevo টেস্ট ইমেইল'
+    : `উদ্যোক্তা গ্রাফিক্স AI — ওটিপি কোড: ${otp}`;
+
+  const htmlContent = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>${subject}</title></head>
+<body style="margin:0;padding:24px;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">
+  <div style="max-width:520px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.06);border:1px solid #e2e8f0;">
+    <div style="background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);padding:28px 24px;text-align:center;">
+      <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:0.5px;">উদ্যোক্তা গ্রাফিক্স AI</h1>
+      <p style="margin:6px 0 0;color:#94a3b8;font-size:13px;">Ecom Design Solution</p>
+    </div>
+    <div style="padding:32px 28px;text-align:center;">
+      <h2 style="margin:0 0 12px;font-size:18px;color:#0f172a;font-weight:600;">
+        ${isTest ? 'Brevo টেস্ট কানেকশন সফল! 🎉' : 'আপনার ওটিপি ভেরিফিকেশন কোড'}
+      </h2>
+      <p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:1.6;">
+        ${isTest ? 'এটি একটি টেস্ট ইমেইল। আপনার Brevo API Key ও Sender Email একদম সঠিকভাবে কাজ করছে।' : 'উদ্যোক্তা গ্রাফিক্স AI-তে লগইন বা অ্যাকাউন্ট ভেরিফাই করতে নিচের ৪ ডিজিটের ওটিপি কোডটি ব্যবহার করুন:'}
+      </p>
+      <div style="margin:24px 0;display:inline-block;padding:16px 36px;background:#fff7ed;border:2px dashed #f97316;border-radius:12px;">
+        <span style="font-size:36px;font-weight:800;letter-spacing:10px;color:#f97316;display:inline-block;padding-left:10px;">${otp}</span>
+      </div>
+      <p style="margin:16px 0 0;font-size:13px;color:#64748b;line-height:1.6;">
+        ⏱️ এই কোডটির মেয়াদ <b>৫ মিনিট</b>।<br>
+        🔒 নিরাপত্তার স্বার্থে এই কোডটি অন্য কারো সাথে শেয়ার করবেন না।
+      </p>
+      <div style="margin-top:24px;padding:14px 16px;background:#f8fafc;border-radius:10px;font-size:12.5px;color:#475569;text-align:left;line-height:1.6;border-left:4px solid #f97316;">
+        💡 <b>প্রবাসী ভাইদের জন্য বিশেষ সুবিধা:</b> একবার ওটিপি দিয়ে পাসওয়ার্ড সেট করে নিলে পরবর্তীতে সৌদি আরব, ইউএই বা যেকোনো দেশ থেকে ওটিপি ছাড়াই সরাসরি পাসওয়ার্ড দিয়ে এক সেকেন্ডে লগইন করতে পারবেন।
+      </div>
+    </div>
+    <div style="background:#f8fafc;padding:16px 24px;text-align:center;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+      © ${new Date().getFullYear()} উদ্যোক্তা গ্রাফিক্স AI · ecomdesignsolution.com
+    </div>
+  </div>
+</body>
+</html>`;
+
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': cfg.apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        sender: {
+          name: cfg.senderName || 'উদ্যোক্তা গ্রাফিক্স AI',
+          email: cfg.senderEmail
+        },
+        to: [{ email: toEmail }],
+        subject,
+        htmlContent
+      })
+    });
+
+    const resJson = await res.json().catch(() => null);
+    if (!res.ok) {
+      const errMsg = (resJson && (resJson.message || resJson.error)) || `Brevo HTTP ${res.status}`;
+      return { ok: false, err: errMsg };
+    }
+    return { ok: true, id: resJson?.messageId };
+  } catch (err: any) {
+    return { ok: false, err: err.message || 'Brevo API নেটওয়ার্ক এরর' };
+  }
+}
+
+function normIdentifier(input: string | null | undefined): { val: string; type: 'phone' | 'email' | '' } {
+  const raw = String(input || '').trim().toLowerCase();
+  if (!raw) return { val: '', type: '' };
+
+  if (/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(raw)) {
+    return { val: raw, type: 'email' };
+  }
+
+  let p = raw.replace(/\D/g, '');
+  if (p.startsWith('880')) p = p.slice(2);
+  if (/^01\d{9}$/.test(p)) {
+    return { val: p, type: 'phone' };
+  }
+
+  return { val: '', type: '' };
+}
+
 function normPhone(p: string | null | undefined): string {
-  let s = String(p || '').replace(/\D/g, '');
-  if (s.startsWith('880')) s = s.slice(2);
-  return /^01\d{9}$/.test(s) ? s : '';
+  const norm = normIdentifier(p);
+  return norm.type === 'phone' ? norm.val : (norm.type === 'email' ? norm.val : '');
 }
 
 function todayDhaka(): string {
@@ -180,6 +466,10 @@ function formatAdminPayment(p: any) {
 }
 
 Deno.serve(async (req: Request) => {
+  const corsHeaders = getCorsHeaders(req);
+  const { json } = makeResponders(corsHeaders);
+  const clientIp = getClientIp(req);
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -190,7 +480,7 @@ Deno.serve(async (req: Request) => {
 
   const url = new URL(req.url);
 
-  // EPS Redirect Callback (?eps=back)
+  // EPS Redirect Callback (?eps=back) — সর্বদা সার্ভার-সাইডে EPS API যাচাই করে স্ট্যাটাস নির্ধারণ
   if (url.searchParams.get('eps') === 'back') {
     const rawTx =
       url.searchParams.get('tx') ||
@@ -200,24 +490,11 @@ Deno.serve(async (req: Request) => {
     const m = rawTx.match(/^\d{10,}/);
     const tx = m ? m[0] : '';
 
-    const paramStatus = String(url.searchParams.get('Status') || url.searchParams.get('status') || '').toLowerCase();
-
     let verifyStatus = 'pending';
-    if (paramStatus === 'aborted' || paramStatus === 'cancelled' || paramStatus === 'failed') {
-      verifyStatus = 'cancelled';
-      if (tx) {
-        try {
-          await supabase.from('payments').update({
-            status: 'cancelled',
-            note: 'EPS: ' + (url.searchParams.get('Message') || paramStatus),
-            done_at: new Date().toISOString()
-          }).eq('id', tx);
-        } catch {}
-      }
-    } else if (tx) {
+    if (tx) {
       try {
         const v = await verifyPayment(supabase, tx);
-        verifyStatus = v.status;
+        verifyStatus = v.status || 'pending';
       } catch {}
     }
 
@@ -241,7 +518,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // রিকোয়েস্ট বডি বা কুয়েরি পার্সিং
+  // রিকোয়েস্ট বডি বা কুয়েরি পার্সিং (GET মেথড শুধুমাত্র পাবলিক রিড-অনলি অ্যাকশনের জন্য সীমাবদ্ধ)
   let q: any = {};
   if (req.method === 'GET') {
     const qParam = url.searchParams.get('q');
@@ -249,7 +526,11 @@ Deno.serve(async (req: Request) => {
       try {
         q = JSON.parse(qParam);
       } catch {
-        return json({ ok: false, err: 'ভুল রিকোয়েস্ট' });
+        return json({ ok: false, err: 'ভুল রিকোয়েস্ট' }, 400);
+      }
+      const getAct = String(q.action || '');
+      if (getAct !== 'lp' && getAct !== 'content') {
+        return json({ ok: false, err: 'এই অ্যাকশনের জন্য POST মেথড ব্যবহার করুন' }, 405);
       }
     } else {
       return json({ ok: true, msg: 'উদ্যোক্তা গ্রাফিক্স AI — Supabase API রানিং ✓' });
@@ -258,7 +539,7 @@ Deno.serve(async (req: Request) => {
     try {
       q = await req.json();
     } catch {
-      return json({ ok: false, err: 'ভুল রিকোয়েস্ট বডি' });
+      return json({ ok: false, err: 'ভুল রিকোয়েস্ট বডি' }, 400);
     }
   }
 
@@ -281,7 +562,7 @@ Deno.serve(async (req: Request) => {
         { data: polList },
         { data: fixesList }
       ] = await Promise.all([
-        supabase.from('settings').select('*'),
+        supabase.from('settings').select('key,value').in('key', PUBLIC_SETTING_KEYS),
         supabase.from('texts').select('*'),
         supabase.from('cats').select('*').eq('show', true).order('sort'),
         supabase.from('styles').select('*').or('status.eq.published,status.eq.পাবলিশড').order('sort'),
@@ -330,7 +611,11 @@ Deno.serve(async (req: Request) => {
           monthly: settingsMap.monthly || '33',
           days: settingsMap.days || '365',
           gateway_fee: gatewayFeeVal,
-          meta_pixel_id: String(settingsMap.meta_pixel_id || '').trim()
+          meta_pixel_id: String(settingsMap.meta_pixel_id || '').trim(),
+          site_logo: String(settingsMap.site_logo || '').trim(),
+          eps_checkout_banner: String(settingsMap.eps_checkout_banner || '').trim(),
+          eps_footer_desktop: String(settingsMap.eps_footer_desktop || '').trim(),
+          eps_footer_mobile: String(settingsMap.eps_footer_mobile || '').trim()
         },
         texts: textsMap,
         cats: (catsList || []).map((c: any) => ({ id: c.id, name: c.name })),
@@ -342,51 +627,61 @@ Deno.serve(async (req: Request) => {
         fixes: (fixesList || []).map((f: any) => ({ t: f.title, line: f.line }))
       };
 
-      // লাইভ CMS আপডেট সাথে সাথে দেখাতে no-cache (ফ্রন্টএন্ড তাৎক্ষণিক লোডের জন্য localStorage ক্যাশ ব্যবহার করে)
+      // Edge Caching (৫ মিনিট CDN ক্যাশ + ১০ মিনিট stale-while-revalidate — হাই ট্র্যাফিকে DB লোড ৯০%+ কমাবে)
       return json(resData, 200, {
-        'Cache-Control': 'no-cache, no-store, must-revalidate'
+        'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600'
       });
     }
 
     if (action === 'lp') {
-      const { data: cfgRow } = await supabase.from('landing_config').select('data').eq('id', 'main').single();
-      const { data: txtList } = await supabase.from('texts').select('*');
+      const [{ data: cfgRow }, { data: txtList }, { data: pubStList }] = await Promise.all([
+        supabase.from('landing_config').select('data').eq('id', 'main').single(),
+        supabase.from('texts').select('key,value').like('key', 'L%'),
+        supabase.from('settings').select('key,value').in('key', PUBLIC_SETTING_KEYS)
+      ]);
       const tMap: Record<string, string> = {};
       (txtList || []).forEach((r: any) => {
         if (r.key && r.key.startsWith('L') && r.value) {
           tMap[r.key] = r.value;
         }
       });
-      return json({ ok: true, config: cfgRow?.data || null, t: tMap }, 200, {
-        'Cache-Control': 'no-cache, no-store, must-revalidate'
+      const pMap: Record<string, string> = {};
+      (pubStList || []).forEach((r: any) => { pMap[r.key] = r.value || ''; });
+      return json({
+        ok: true,
+        config: cfgRow?.data || null,
+        t: tMap,
+        pay: {
+          price: pMap.price || '399',
+          monthly: pMap.monthly || '33',
+          days: pMap.days || '365',
+          gateway_fee: pMap.gateway_fee || '0',
+          meta_pixel_id: String(pMap.meta_pixel_id || '').trim(),
+          site_logo: String(pMap.site_logo || '').trim(),
+          eps_checkout_banner: String(pMap.eps_checkout_banner || '').trim(),
+          eps_footer_desktop: String(pMap.eps_footer_desktop || '').trim(),
+          eps_footer_mobile: String(pMap.eps_footer_mobile || '').trim()
+        }
+      }, 200, {
+        'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600'
       });
     }
 
     // -----------------------------------------------------------------
-    // ২. কাস্টমার অথেন্টিকেশন ও ওটিপি
+    // ২. কাস্টমার অথেন্টিকেশন ও ওটিপি (Phone OR Email Support)
     // -----------------------------------------------------------------
-    const phone = normPhone(q.phone);
+    const authId = normIdentifier(q.phone || q.email || q.identifier);
+    const phone = authId.val;
 
     if (action === 'login') {
-      if (!phone) return json({ ok: false, err: '১১ সংখ্যার সঠিক মোবাইল নম্বর দিন' });
+      if (!phone) return json({ ok: false, err: '১১ সংখ্যার সঠিক মোবাইল নম্বর অথবা ইমেইল এড্রেস দিন' });
 
-      // সদস্য আছে কিনা নিশ্চিত করা
-      let { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
-      if (!member) {
-        const { data: newMem } = await supabase
-          .from('members')
-          .insert({
-            phone,
-            status: 'new',
-            joined: todayDhaka(),
-            made: 0
-          })
-          .select()
-          .single();
-        member = newMem;
+      // IP-ভিত্তিক ওটিপি বট সুরক্ষা (প্রতি IP ১০ মিনিটে সর্বোচ্চ ৫টি ওটিপি)
+      if (!checkRateLimit(`otp_ip:${clientIp}`, 5, 10 * 60 * 1000)) {
+        return json({ ok: false, err: 'অতিরিক্ত ওটিপি অনুরোধ! অনুগ্রহ করে ১০ মিনিট পর আবার চেষ্টা করুন' }, 429);
       }
 
-      // সার্ভার-সাইড OTP রেট লিমিট (৫৫ সেকেন্ডের মধ্যে একই নম্বরে পুনরায় SMS পাঠানো বন্ধ)
+      // সার্ভার-সাইড OTP রেট লিমিট (৫৫ সেকেন্ডের মধ্যে একই নম্বরে/ইমেইলে পুনরায় OTP পাঠানো বন্ধ)
       const { data: prevOtp } = await supabase
         .from('otp_codes')
         .select('created_at')
@@ -395,12 +690,12 @@ Deno.serve(async (req: Request) => {
       if (prevOtp && prevOtp.created_at) {
         const elapsedSec = Math.floor((Date.now() - new Date(prevOtp.created_at).getTime()) / 1000);
         if (elapsedSec >= 0 && elapsedSec < 55) {
-          return json({ ok: false, err: `অনুগ্রহ করে ${55 - elapsedSec} সেকেন্ড পর আবার ওটিপি চেষ্টা করুন` });
+          return json({ ok: false, err: `অনুগ্রহ করে ${55 - elapsedSec} সেকেন্ড পর আবার ওটিপি চেষ্টা করুন` }, 429);
         }
       }
 
-      // ৪-সংখ্যার OTP তৈরি ও সেভ করা
-      const otp = String(Math.floor(1000 + Math.random() * 9000));
+      // ক্রিপ্টোগ্রাফিকভাবে নিরাপদ ৪-সংখ্যার OTP তৈরি ও সেভ করা (ওটিপি যাচাইয়ের আগে members রো তৈরি নয়)
+      const otp = secureOtp4();
       const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
       await supabase.from('otp_codes').upsert({
@@ -411,49 +706,66 @@ Deno.serve(async (req: Request) => {
         created_at: new Date().toISOString()
       });
 
-      // SMS Gateway কল (BulkSMSBD - DB Settings || .env)
-      const { data: stListForSms } = await supabase.from('settings').select('*');
-      const stMapForSms: Record<string, string> = {};
-      (stListForSms || []).forEach((r: any) => (stMapForSms[r.key] = r.value));
-      const smsCfg = getSmsConfig(stMapForSms);
+      if (authId.type === 'email') {
+        // Brevo Email OTP Gateway কল
+        const { data: stListForEmail } = await supabase
+          .from('settings')
+          .select('key,value')
+          .in('key', ['brevo_api_key', 'brevo_sender_email', 'brevo_sender_name']);
+        const stMapForEmail: Record<string, string> = {};
+        (stListForEmail || []).forEach((r: any) => (stMapForEmail[r.key] = r.value));
+        const brevoCfg = getBrevoConfig(stMapForEmail);
 
-      if (smsCfg.ready) {
-        try {
-          const tpl = smsCfg.otpTemplate || 'উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।';
-          const smsMsg = tpl.includes('{otp}') ? tpl.replace(/\{otp\}/g, otp) : `${tpl} ${otp}`;
-          const formattedPhone = phone.startsWith('88') ? phone : `88${phone}`;
-          await fetch(smsCfg.apiUrl, {
-            method: 'POST',
-            body: new URLSearchParams({
-              api_key: smsCfg.apiToken,
-              type: 'text',
-              number: formattedPhone,
-              senderid: smsCfg.senderId || '',
-              message: smsMsg
-            })
-          });
-        } catch (e) {
-          console.error('BulkSMSBD Gateway Error:', e);
+        if (!brevoCfg.ready) {
+          return json({ ok: false, err: 'ইমেইল ওটিপি সার্ভিস এখনো কনফিগার করা হয়নি। অ্যাডমিন প্যানেল "সেটিংস" থেকে Brevo API Key ও Sender Email পূরণ করুন।' });
+        }
+
+        const mailRes = await sendBrevoEmail(brevoCfg, phone, otp);
+        if (!mailRes.ok) {
+          console.error('Brevo Gateway Error:', mailRes.err);
+          return json({ ok: false, err: 'ইমেইল ওটিপি পাঠানো যায়নি: ' + (mailRes.err || 'Brevo ত্রুটি') });
+        }
+      } else {
+        // SMS Gateway কল (BulkSMSBD - DB Settings || .env)
+        const { data: stListForSms } = await supabase
+          .from('settings')
+          .select('key,value')
+          .in('key', ['sms_api_token', 'sms_sender_id', 'sms_api_url', 'sms_otp_template']);
+        const stMapForSms: Record<string, string> = {};
+        (stListForSms || []).forEach((r: any) => (stMapForSms[r.key] = r.value));
+        const smsCfg = getSmsConfig(stMapForSms);
+
+        if (smsCfg.ready) {
+          try {
+            const tpl = smsCfg.otpTemplate || 'উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।';
+            const smsMsg = tpl.includes('{otp}') ? tpl.replace(/\{otp\}/g, otp) : `${tpl} ${otp}`;
+            const formattedPhone = phone.startsWith('88') ? phone : `88${phone}`;
+            await fetch(smsCfg.apiUrl, {
+              method: 'POST',
+              body: new URLSearchParams({
+                api_key: smsCfg.apiToken,
+                type: 'text',
+                number: formattedPhone,
+                senderid: smsCfg.senderId || '',
+                message: smsMsg
+              })
+            });
+          } catch (e) {
+            console.error('BulkSMSBD Gateway Error:', e);
+          }
         }
       }
 
-      const { data: pendingPays } = await supabase
-        .from('payments')
-        .select('id')
-        .eq('phone', phone)
-        .eq('status', 'pending');
-
+      // ওটিপি যাচাইয়ের আগে কোনো ব্যক্তিগত মেম্বার তথ্য রিটার্ন করা হবে না
       return json({
         ok: true,
-        member: formatPubMember(member),
-        pending: Boolean(pendingPays && pendingPays.length > 0),
         otpSent: true,
-        token: `tok_${phone}_${Date.now()}`
+        channel: authId.type
       });
     }
 
     if (action === 'verify_otp') {
-      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর অথবা ইমেইল দিন' });
       const enteredOtp = String(q.otp || '').trim();
 
       const { data: otpRow } = await supabase.from('otp_codes').select('*').eq('phone', phone).single();
@@ -469,24 +781,33 @@ Deno.serve(async (req: Request) => {
         return json({ ok: false, err: 'অনেকবার ভুল কোড দেওয়া হয়েছে। অনুগ্রহ করে নতুন ওটিপি নিন।' });
       }
 
-      if (otpRow.otp !== enteredOtp) {
+      if (!timingSafeEqual(String(otpRow.otp), enteredOtp)) {
         await supabase.from('otp_codes').update({ attempts: (otpRow.attempts || 0) + 1 }).eq('phone', phone);
-        return json({ ok: false, err: 'ভুল ওটিপি কোড! আপনার মোবাইলে আসা সঠিক কোডটি দিন।' });
+        return json({ ok: false, err: 'ভুল ওটিপি কোড! সঠিক কোডটি দিন।' });
       }
 
       await supabase.from('otp_codes').delete().eq('phone', phone);
-      const { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      await supabase.from('otp_verified_tokens').delete().eq('phone', phone);
+      const setupTok = `otp_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+      await supabase.from('otp_verified_tokens').insert({
+        token: setupTok,
+        phone,
+        expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString()
+      });
 
       return json({
         ok: true,
-        member: formatPubMember(member),
-        token: `tok_${phone}_${Date.now()}`
+        setup_token: setupTok
       });
     }
 
     if (action === 'check_auth') {
-      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
-      const { data: m } = await supabase.from('members').select('verified, password_hash').eq('phone', phone).single();
+      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর অথবা ইমেইল দিন' });
+      const { data: m } = await supabase
+        .from('members')
+        .select('verified, password_hash')
+        .or(`phone.eq.${phone},email.eq.${phone}`)
+        .maybeSingle();
       return json({
         ok: true,
         exists: Boolean(m),
@@ -496,86 +817,133 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'set_password') {
-      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর অথবা ইমেইল দিন' });
       const pass = String(q.password || '').trim();
-      if (!pass || pass.length < 4) return json({ ok: false, err: 'কমপক্ষে ৪ সংখ্যার পাসওয়ার্ড দিন' });
-      const pHash = q.hash || (await sha256Hex(pass));
+      if (!pass || pass.length < 6) return json({ ok: false, err: 'কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড দিন' });
       const setupTok = String(q.setup_token || '').trim();
 
-      let tokValid = false;
-      if (setupTok) {
-        const { data: tRow } = await supabase
-          .from('otp_verified_tokens')
-          .select('token, expires_at')
-          .eq('token', setupTok)
-          .eq('phone', phone)
-          .single();
-        if (tRow && new Date(tRow.expires_at).getTime() > Date.now()) {
-          tokValid = true;
-          await supabase.from('otp_verified_tokens').delete().eq('token', setupTok);
-        }
+      if (!setupTok) {
+        return json({ ok: false, err: 'অনুমোদিত নয়! পাসওয়ার্ড সেট বা রিসেট করতে ওটিপি যাচাই প্রয়োজন।' }, 401);
       }
 
-      if (!tokValid) {
-        const { data: existingMem } = await supabase
-          .from('members')
-          .select('verified, password_hash')
-          .eq('phone', phone)
-          .single();
-        if (!existingMem || !existingMem.verified || existingMem.password_hash) {
-          return json({ ok: false, err: 'অনুমোদিত নয়! পাসওয়ার্ড সেট বা রিসেট করতে ওটিপি যাচাই প্রয়োজন।' });
-        }
+      // সর্বদা বৈধ OTP setup_token বাধ্যতামূলক (কোনো বাইপাস অনুমোদিত নয়)
+      const { data: tRow } = await supabase
+        .from('otp_verified_tokens')
+        .select('token, expires_at')
+        .eq('token', setupTok)
+        .eq('phone', phone)
+        .single();
+      if (!tRow || new Date(tRow.expires_at).getTime() <= Date.now()) {
+        return json({ ok: false, err: 'ওটিপি সেশনের মেয়াদ শেষ বা অবৈধ! আবার ওটিপি যাচাই করুন।' }, 401);
       }
+      await supabase.from('otp_verified_tokens').delete().eq('token', setupTok);
 
-      const { data: updated, error } = await supabase
+      const pHash = await hashPasswordPbkdf2(pass);
+      const { data: existingMem } = await supabase
         .from('members')
-        .upsert({
-          phone,
+        .select('phone, email')
+        .or(`phone.eq.${phone},email.eq.${phone}`)
+        .maybeSingle();
+
+      let updated: any = null;
+      let upErr: any = null;
+      const memPhone = existingMem ? existingMem.phone : phone;
+
+      if (existingMem) {
+        const updatePayload: Record<string, any> = {
           password_hash: pHash,
           verified: true,
           last_seen: new Date().toISOString()
-        })
-        .select()
-        .single();
+        };
+        if (authId.type === 'email' && !existingMem.email) {
+          updatePayload.email = phone;
+        }
+        const res = await supabase
+          .from('members')
+          .update(updatePayload)
+          .eq('phone', memPhone)
+          .select()
+          .single();
+        updated = res.data;
+        upErr = res.error;
+      } else {
+        const res = await supabase
+          .from('members')
+          .insert({
+            phone: memPhone,
+            email: authId.type === 'email' ? phone : '',
+            status: 'new',
+            joined: todayDhaka(),
+            made: 0,
+            password_hash: pHash,
+            verified: true,
+            last_seen: new Date().toISOString()
+          })
+          .select()
+          .single();
+        updated = res.data;
+        upErr = res.error;
+      }
 
-      if (error) return json({ ok: false, err: error.message });
+      if (upErr || !updated) return json({ ok: false, err: (upErr && upErr.message) || 'পাসওয়ার্ড সেট করা যায়নি' });
+      // পাসওয়ার্ড বদলালে পুরোনো সেশন বাতিল করে নতুন সেশন টোকেন তৈরি
+      await supabase.from('member_sessions').delete().eq('phone', memPhone);
       const sessTok = `ms_${crypto.randomUUID().replace(/-/g, '')}`;
       await supabase.from('member_sessions').insert({
         token: sessTok,
-        phone,
+        phone: memPhone,
         expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()
       });
       return json({ ok: true, member: formatPubMember(updated), session_token: sessTok });
     }
 
     if (action === 'login_password') {
-      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+      if (!phone) return json({ ok: false, err: 'সঠিক মোবাইল নম্বর অথবা ইমেইল দিন' });
       const pass = String(q.password || '').trim();
-      const pHash = q.hash || (pass ? await sha256Hex(pass) : '');
+      if (!pass) return json({ ok: false, err: 'পাসওয়ার্ড লিখুন' });
 
-      const { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
-      if (!member) return json({ ok: false, err: 'নম্বরটি পাওয়া যায়নি' });
+      // ব্রুট-ফোর্স সুরক্ষা (প্রতি নম্বর/ইমেইল+IP ১৫ মিনিটে সর্বোচ্চ ৫ চেষ্টা)
+      if (!checkRateLimit(`login:${phone}:${clientIp}`, 5, 15 * 60 * 1000)) {
+        return json({ ok: false, err: 'অনেকবার ভুল পাসওয়ার্ড! ১৫ মিনিট পর আবার চেষ্টা করুন বা ওটিপি দিয়ে রিসেট করুন।' }, 429);
+      }
+
+      const { data: member } = await supabase
+        .from('members')
+        .select('*')
+        .or(`phone.eq.${phone},email.eq.${phone}`)
+        .maybeSingle();
+      if (!member) return json({ ok: false, err: 'নম্বর/ইমেইল বা পাসওয়ার্ড সঠিক নয়' });
 
       if (!member.password_hash) {
         return json({ ok: false, needOtp: true, err: 'পাসওয়ার্ড সেট করা নেই, ওটিপি দিয়ে ভেরিফাই করুন' });
       }
 
-      if (member.password_hash !== pHash && member.password_hash !== pass) {
+      const ver = await verifyPasswordStored(pass, String(member.password_hash));
+      if (!ver.ok) {
         return json({ ok: false, err: 'ভুল পাসওয়ার্ড' });
       }
 
-      await supabase.from('members').update({ last_seen: new Date().toISOString() }).eq('phone', phone);
+      const memPhone = member.phone;
+      const updateFields: Record<string, any> = { last_seen: new Date().toISOString() };
+      if (ver.needsUpgrade) {
+        updateFields.password_hash = await hashPasswordPbkdf2(pass);
+      }
+      if (authId.type === 'email' && !member.email) {
+        updateFields.email = phone;
+      }
+      await supabase.from('members').update(updateFields).eq('phone', memPhone);
+
       const sessTok = `ms_${crypto.randomUUID().replace(/-/g, '')}`;
       await supabase.from('member_sessions').insert({
         token: sessTok,
-        phone,
+        phone: memPhone,
         expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()
       });
       return json({ ok: true, member: formatPubMember(member), session_token: sessTok });
     }
 
     if (!phone && !action.startsWith('a_')) {
-      return json({ ok: false, err: 'সঠিক মোবাইল নম্বর দিন' });
+      return json({ ok: false, err: 'সঠিক মোবাইল নম্বর অথবা ইমেইল দিন' });
     }
 
     // মেম্বার প্রটেক্টেড অ্যাকশনগুলোর জন্য বাধ্যতামূলক সেশন টোকেন যাচাই
@@ -587,12 +955,17 @@ Deno.serve(async (req: Request) => {
       }
       const { data: mSess } = await supabase
         .from('member_sessions')
-        .select('token, expires_at')
+        .select('token, expires_at, phone')
         .eq('token', mTok)
-        .eq('phone', phone)
         .single();
       if (!mSess || new Date(mSess.expires_at).getTime() < Date.now()) {
         return json({ ok: false, auth: false, err: 'সেশনের মেয়াদ শেষ, আবার লগইন করুন' });
+      }
+      if (mSess.phone !== phone) {
+        const { data: chkM } = await supabase.from('members').select('phone, email').eq('phone', mSess.phone).maybeSingle();
+        if (!chkM || (chkM.phone !== phone && chkM.email !== phone)) {
+          return json({ ok: false, auth: false, err: 'অননুমোদিত সেশন টোকেন' });
+        }
       }
     }
 
@@ -600,14 +973,19 @@ Deno.serve(async (req: Request) => {
     // ৩. মেম্বার প্রোফাইল ও স্ট্যাটাস
     // -----------------------------------------------------------------
     if (action === 'me') {
-      let { data: member } = await supabase.from('members').select('*').eq('phone', phone).single();
+      let { data: member } = await supabase
+        .from('members')
+        .select('*')
+        .or(`phone.eq.${phone},email.eq.${phone}`)
+        .maybeSingle();
       if (!member) return json({ ok: false, err: 'আগে লগইন করুন' });
 
+      const memPhone = member.phone;
       // Pending পেমেন্ট ভেরিফাই
       const { data: pList } = await supabase
         .from('payments')
         .select('*')
-        .eq('phone', phone)
+        .eq('phone', memPhone)
         .eq('status', 'pending');
 
       if (pList && pList.length > 0) {
@@ -616,14 +994,14 @@ Deno.serve(async (req: Request) => {
             await verifyPayment(supabase, p.id);
           } catch {}
         }
-        const { data: updatedMem } = await supabase.from('members').select('*').eq('phone', phone).single();
+        const { data: updatedMem } = await supabase.from('members').select('*').eq('phone', memPhone).single();
         if (updatedMem) member = updatedMem;
       }
 
       const { data: stillPending } = await supabase
         .from('payments')
         .select('id')
-        .eq('phone', phone)
+        .eq('phone', memPhone)
         .eq('status', 'pending');
 
       return json({
@@ -681,8 +1059,17 @@ Deno.serve(async (req: Request) => {
       if (q.logo !== undefined && typeof q.logo === 'string') {
         const rawLogo = q.logo.trim();
         if (rawLogo.startsWith('http://') || rawLogo.startsWith('https://')) {
+          if (!isSafePublicUrl(rawLogo)) {
+            return json({ ok: false, err: 'অবৈধ লোগো URL' });
+          }
           logoUrl = rawLogo;
         } else if (rawLogo.startsWith('data:image/')) {
+          if (!/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(rawLogo)) {
+            return json({ ok: false, err: 'শুধুমাত্র PNG, JPG বা WebP ফরম্যাটের লোগো আপলোড করা যাবে' });
+          }
+          if (rawLogo.length > 450000) {
+            return json({ ok: false, err: 'লোগোর সাইজ অনেক বড় (সর্বোচ্চ ৩০০ KB অনুমোদিত)' });
+          }
           try {
             const { data: stList } = await supabase.from('settings').select('*');
             stMapForLogo = {};
@@ -696,13 +1083,13 @@ Deno.serve(async (req: Request) => {
                   try { await deleteFromCloudinary(prevLogoUrl, stMapForLogo); } catch {}
                 }
               } else {
-                logoUrl = rawLogo;
+                return json({ ok: false, err: 'লোগো আপলোড ব্যর্থ হয়েছে, অনুগ্রহ করে আবার চেষ্টা করুন' });
               }
             } else {
               logoUrl = rawLogo;
             }
           } catch {
-            logoUrl = rawLogo;
+            return json({ ok: false, err: 'লোগো আপলোড করতে সমস্যা হয়েছে, আবার চেষ্টা করুন' });
           }
         } else if (rawLogo === 'clear' || rawLogo === 'delete') {
           logoUrl = '';
@@ -792,15 +1179,20 @@ Deno.serve(async (req: Request) => {
         return json({ ok: false, err: `"${res.tooLong[0]}" ঘরে লিমিটের চেয়ে বেশি লেখা হয়েছে, একটু ছোট করুন` });
       }
 
-      // কাউন্টার বৃদ্ধি
-      await supabase.from('members').update({
-        made: (Number(member.made) || 0) + 1,
-        last_seen: new Date().toISOString()
-      }).eq('phone', phone);
-
-      await supabase.from('styles').update({
-        used: (Number(tpl.used) || 0) + 1
-      }).eq('id', tpl.id);
+      // অ্যাটমিক কাউন্টার বৃদ্ধি (কনকারেন্ট রেস কন্ডিশন রোধ)
+      const { error: incErr } = await supabase.rpc('increment_cmd_counters', {
+        p_phone: phone,
+        p_style_id: tpl.id
+      });
+      if (incErr) {
+        await supabase.from('members').update({
+          made: (Number(member.made) || 0) + 1,
+          last_seen: new Date().toISOString()
+        }).eq('phone', phone);
+        await supabase.from('styles').update({
+          used: (Number(tpl.used) || 0) + 1
+        }).eq('id', tpl.id);
+      }
 
       // ডিজাইন হিস্ট্রি সেভ (PostgreSQL design_history)
       try {
@@ -922,21 +1314,46 @@ Deno.serve(async (req: Request) => {
     // -----------------------------------------------------------------
     if (action.startsWith('a_')) {
       if (action === 'a_login') {
+        // অ্যাডমিন লগইন ব্রুট-ফোর্স সুরক্ষা (প্রতি IP ১৫ মিনিটে সর্বোচ্চ ৫ চেষ্টা)
+        if (!checkRateLimit(`admin_login:${clientIp}`, 5, 15 * 60 * 1000)) {
+          return json({ ok: false, err: 'অতিরিক্ত ভুল অ্যাডমিন লগইন চেষ্টা! ১৫ মিনিট পর আবার চেষ্টা করুন।' }, 429);
+        }
+
         const pass = String(q.pass || '');
+        if (!pass) return json({ ok: false, err: 'পাসওয়ার্ড দিন' });
+
         const { data: pRow } = await supabase.from('settings').select('value').eq('key', 'admin_password').single();
-        const currentPass = pRow?.value || Deno.env.get('ADMIN_PASSWORD') || '';
-        const adminSecret = Deno.env.get('ADMIN_PASSWORD_HASH') || '';
-        if (!currentPass && !adminSecret) {
+        const dbPass = String(pRow?.value || '').trim();
+        const envPass = String(Deno.env.get('ADMIN_PASSWORD') || '').trim();
+        const envHash = String(Deno.env.get('ADMIN_PASSWORD_HASH') || '').trim();
+
+        let isValid = false;
+        let shouldUpgradeDbPass = false;
+
+        // DB-তে পাসওয়ার্ড সেট করা থাকলে শুধুমাত্র সেটিই যাচাই হবে (স্থায়ী env ব্যাকডোর বন্ধ)
+        if (dbPass) {
+          const ver = await verifyPasswordStored(pass, dbPass);
+          isValid = ver.ok;
+          shouldUpgradeDbPass = ver.ok && ver.needsUpgrade;
+        } else if (envPass) {
+          const ver = await verifyPasswordStored(pass, envPass);
+          isValid = ver.ok;
+        } else if (envHash) {
+          const passHash = await sha256Hex(pass);
+          isValid = timingSafeEqual(passHash, envHash.toLowerCase());
+        } else {
           return json({ ok: false, err: 'অ্যাডমিন পাসওয়ার্ড কনফিগার করা নেই' });
         }
-        const passHash = await sha256Hex(pass);
 
-        // নিরাপদ ভ্যালিডেশন: প্লেইনটেক্সট বা SHA-256 হ্যাশ ম্যাচিং
-        const isValid = Boolean(pass) && (
-          (currentPass && pass === currentPass) ||
-          (adminSecret && (pass === adminSecret || passHash === adminSecret.toLowerCase()))
-        );
         if (isValid) {
+          if (shouldUpgradeDbPass) {
+            try {
+              const upgraded = await hashPasswordPbkdf2(pass);
+              await supabase.from('settings').upsert({ key: 'admin_password', value: upgraded }, { onConflict: 'key' });
+            } catch {}
+          }
+          // মেয়াদোত্তীর্ণ পুরোনো অ্যাডমিন সেশন পরিষ্কার
+          await supabase.from('admin_sessions').delete().lt('expires_at', new Date().toISOString());
           const tok = `adm_${crypto.randomUUID().replace(/-/g, '')}`;
           await supabase.from('admin_sessions').insert({
             token: tok,
@@ -945,7 +1362,7 @@ Deno.serve(async (req: Request) => {
           await logActivity(supabase, 'অ্যাডমিন লগইন', 'অ্যাডমিন প্যানেলে সফলভাবে লগইন করা হয়েছে');
           return json({ ok: true, tok });
         }
-        return json({ ok: false, err: 'ভুল অ্যাডমিন পাসওয়ার্ড' });
+        return json({ ok: false, err: 'ভুল অ্যাডমিন পাসওয়ার্ড' }, 401);
       }
 
       // টোকেন ভ্যালিডেশন
@@ -969,11 +1386,11 @@ Deno.serve(async (req: Request) => {
         const today = todayDhaka();
         const weekAgo = addDays(today, -7);
 
-        const [{ count: mCount }, { data: memList }, { data: payList }, { data: stList }] =
+        const [{ count: mCount }, memList, payList, { data: stList }] =
           await Promise.all([
             supabase.from('members').select('*', { count: 'exact', head: true }),
-            supabase.from('members').select('*'),
-            supabase.from('payments').select('*').order('created_at', { ascending: false }),
+            fetchAllRows(supabase, 'members', 'joined', false),
+            fetchAllRows(supabase, 'payments', 'created_at', false),
             supabase.from('styles').select('name, used').order('used', { ascending: false }).limit(6)
           ]);
 
@@ -1118,9 +1535,21 @@ Deno.serve(async (req: Request) => {
         const { data: stListForUpload } = await supabase.from('settings').select('*');
         const stMapForUpload: Record<string, string> = {};
         (stListForUpload || []).forEach((r: any) => (stMapForUpload[r.key] = r.value));
-        const fileOrUrl = q.url || q.data;
+        const fileOrUrl = String(q.url || q.data || '').trim();
         if (!fileOrUrl) {
           return json({ ok: false, err: 'কোনো ইমেজ ফাইল বা URL দেওয়া হয়নি' });
+        }
+        if (/^https?:\/\//i.test(fileOrUrl)) {
+          if (!isSafePublicUrl(fileOrUrl)) {
+            return json({ ok: false, err: 'অননুমোদিত রিমোট URL' });
+          }
+        } else if (fileOrUrl.startsWith('data:')) {
+          if (!/^data:image\/(png|jpeg|jpg|webp|gif);base64,/i.test(fileOrUrl)) {
+            return json({ ok: false, err: 'শুধুমাত্র PNG, JPG, WebP বা GIF ছবি আপলোড করা যাবে' });
+          }
+          if (fileOrUrl.length > 7000000) {
+            return json({ ok: false, err: 'ছবির সাইজ ৫ MB-এর বেশি হতে পারবে না' });
+          }
         }
         const subfolder = String(q.subfolder || q.folder || '').trim();
         const uploadRes = await uploadToCloudinary(fileOrUrl, q.name || 'image.jpg', stMapForUpload, subfolder);
@@ -1146,7 +1575,7 @@ Deno.serve(async (req: Request) => {
       }
 
       if (action === 'a_members') {
-        const { data: list } = await supabase.from('members').select('*').order('joined', { ascending: false });
+        const list = await fetchAllRows(supabase, 'members', 'joined', false);
         return json({ ok: true, list: (list || []).map(formatAdminMember) });
       }
 
@@ -1247,6 +1676,11 @@ Deno.serve(async (req: Request) => {
         const { error } = await supabase.from('members').update(updatePayload).eq('phone', mPhone);
         if (error) return json({ ok: false, err: error.message });
 
+        // মেম্বার ব্লক করা হলে তার সব অ্যাক্টিভ সেশন সাথে সাথে বাতিল করা
+        if (updatePayload.status === 'blocked') {
+          await supabase.from('member_sessions').delete().eq('phone', mPhone);
+        }
+
         const changeDesc: string[] = [];
         if (s.status) changeDesc.push(`স্ট্যাটাস: ${s.status}`);
         if (s.expiry) changeDesc.push(`মেয়াদ: ${s.expiry}`);
@@ -1288,6 +1722,9 @@ Deno.serve(async (req: Request) => {
           .update({ verified: false, password_hash: '' })
           .eq('phone', mPhone);
         if (error) return json({ ok: false, err: error.message });
+        await supabase.from('otp_codes').delete().eq('phone', mPhone);
+        await supabase.from('member_sessions').delete().eq('phone', mPhone);
+        await supabase.from('otp_verified_tokens').delete().eq('phone', mPhone);
         await logActivity(supabase, 'মেম্বার অথেনটিকেশন রিসেট', `ফোন: ${mPhone}`);
         return json({ ok: true });
       }
@@ -1339,7 +1776,7 @@ Deno.serve(async (req: Request) => {
       }
 
       if (action === 'a_payments') {
-        const { data: list } = await supabase.from('payments').select('*').order('created_at', { ascending: false });
+        const list = await fetchAllRows(supabase, 'payments', 'created_at', false);
         return json({ ok: true, list: (list || []).map(formatAdminPayment) });
       }
 
@@ -1468,7 +1905,8 @@ Deno.serve(async (req: Request) => {
 
         for (const t of tabs) {
           if (t === 'settings') {
-            out.settings = stList || [];
+            // সংবেদনশীল সিক্রেট কী কখনোই ব্রাউজারে প্লেইনটেক্সটে পাঠানো হবে না
+            out.settings = (stList || []).filter((r: any) => !SECRET_SETTING_KEYS.has(String(r.key || '')));
           } else if (t === 'styles') {
             const { data: styles } = await supabase.from('styles').select('*').order('sort');
             out.styles = (styles || []).map((s: any) => ({
@@ -1555,6 +1993,14 @@ Deno.serve(async (req: Request) => {
           apiUrl: smsCfg.apiUrl || '',
           otpTemplate: smsCfg.otpTemplate || 'উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।',
           apiToken: smsCfg.apiToken ? '••••' + String(smsCfg.apiToken).slice(-4) : ''
+        };
+
+        const brevoCfg = getBrevoConfig(stMap);
+        out.brevo = {
+          ready: brevoCfg.ready,
+          senderEmail: brevoCfg.senderEmail || '',
+          senderName: brevoCfg.senderName || 'উদ্যোক্তা গ্রাফিক্স AI',
+          apiKey: brevoCfg.apiKey ? '••••' + String(brevoCfg.apiKey).slice(-4) : ''
         };
 
         out.webapp = url.origin + url.pathname;
@@ -2158,6 +2604,39 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      if (action === 'a_brevo') {
+        const b = q.brevo || {};
+        const map: Record<string, string> = {
+          apiKey: 'brevo_api_key',
+          senderEmail: 'brevo_sender_email',
+          senderName: 'brevo_sender_name'
+        };
+
+        for (const k in map) {
+          if (b[k] !== undefined && b[k] !== null && b[k] !== '') {
+            const { error: uErr } = await supabase.from('settings').upsert({ key: map[k], value: String(b[k]).trim() }, { onConflict: 'key' });
+            if (uErr) return json({ ok: false, err: 'Brevo সেটিংস সেভ ব্যর্থ: ' + uErr.message });
+          }
+        }
+        await logActivity(supabase, 'Brevo ইমেইল কনফিগারেশন আপডেট', `Sender: ${b.senderEmail || ''}, API Key সেভ করা হয়েছে`);
+        return json({ ok: true });
+      }
+
+      if (action === 'a_email_test') {
+        const { data: stList } = await supabase.from('settings').select('*');
+        const stMap: Record<string, string> = {};
+        (stList || []).forEach((r: any) => (stMap[r.key] = r.value));
+
+        const brevoCfg = getBrevoConfig(stMap);
+        if (!brevoCfg.ready) return json({ ok: false, err: 'আগে Brevo API Key ও Sender Email পূরণ ও সেভ করুন' });
+
+        const toEmail = String(q.to || '').trim().toLowerCase();
+        if (!toEmail || !toEmail.includes('@')) return json({ ok: false, err: 'সঠিক ইমেইল এড্রেস দিন' });
+
+        const res = await sendBrevoEmail(brevoCfg, toEmail, '1234', true);
+        return json(res);
+      }
+
       if (action === 'a_pass') {
         const oldPass = String(q.old || '');
         const newPass = String(q.pass || '');
@@ -2166,21 +2645,29 @@ Deno.serve(async (req: Request) => {
         }
 
         const { data: pRow } = await supabase.from('settings').select('value').eq('key', 'admin_password').single();
-        const currentPass = pRow?.value || Deno.env.get('ADMIN_PASSWORD') || '';
-        const adminSecret = Deno.env.get('ADMIN_PASSWORD_HASH') || '';
-        const oldHash = await sha256Hex(oldPass);
+        const dbPass = String(pRow?.value || '').trim();
+        const envPass = String(Deno.env.get('ADMIN_PASSWORD') || '').trim();
+        const envHash = String(Deno.env.get('ADMIN_PASSWORD_HASH') || '').trim();
 
-        const oldMatches = Boolean(oldPass) && (
-          (currentPass && oldPass === currentPass) ||
-          (adminSecret && (oldPass === adminSecret || oldHash === adminSecret.toLowerCase()))
-        );
+        let oldMatches = false;
+        if (dbPass) {
+          oldMatches = (await verifyPasswordStored(oldPass, dbPass)).ok;
+        } else if (envPass) {
+          oldMatches = (await verifyPasswordStored(oldPass, envPass)).ok;
+        } else if (envHash) {
+          const oldHash = await sha256Hex(oldPass);
+          oldMatches = timingSafeEqual(oldHash, envHash.toLowerCase());
+        }
 
         if (!oldMatches) {
           return json({ ok: false, err: 'বর্তমান পাসওয়ার্ড মেলেনি' });
         }
 
-        const { error: pErr } = await supabase.from('settings').upsert({ key: 'admin_password', value: newPass }, { onConflict: 'key' });
+        const hashedNew = await hashPasswordPbkdf2(newPass);
+        const { error: pErr } = await supabase.from('settings').upsert({ key: 'admin_password', value: hashedNew }, { onConflict: 'key' });
         if (pErr) return json({ ok: false, err: 'পাসওয়ার্ড পরিবর্তন ব্যর্থ: ' + pErr.message });
+        // বর্তমান সেশন ছাড়া বাকি সব পুরোনো অ্যাডমিন সেশন বাতিল করা
+        await supabase.from('admin_sessions').delete().neq('token', tok);
         await logActivity(supabase, 'অ্যাডমিন পাসওয়ার্ড পরিবর্তন', 'অ্যাডমিন প্যানেলের পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে');
         return json({ ok: true });
       }
@@ -2246,6 +2733,34 @@ async function verifyPayment(supabase: any, tx: string) {
   const statusStr = String(res.Status || '').toLowerCase();
 
   if (statusStr === 'success') {
+    // EPS থেকে পরিশোধিত টাকার পরিমাণ যাচাই
+    const paidAmt = Number(res.TotalAmount ?? res.totalAmount ?? res.Amount ?? res.amount);
+    if (!isNaN(paidAmt) && paidAmt > 0 && paidAmt + 0.01 < Number(p.amount || 0)) {
+      return { ok: false, err: 'পেমেন্টের টাকার পরিমাণ মেলেনি' };
+    }
+
+    const finEntity = String(res.FinancialEntity || '').trim();
+    const methodLabel = finEntity ? (finEntity.toUpperCase().includes('EPS') ? finEntity : `EPS (${finEntity})`) : 'EPS';
+
+    // অ্যাটমিক স্ট্যাটাস লক: শুধু pending থাকা অবস্থাতেই success হবে — ডাবল মেয়াদ বৃদ্ধি (race condition) প্রতিরোধ
+    const { data: claimed, error: pErr } = await supabase
+      .from('payments')
+      .update({
+        status: 'success',
+        trx: res.EpsTransactionId || res.EPSTransactionId || '',
+        method: methodLabel,
+        done_at: new Date().toISOString()
+      })
+      .eq('id', tx)
+      .in('status', ['pending', 'অপেক্ষায়'])
+      .select('id');
+
+    if (pErr) return { ok: false, err: 'পেমেন্ট স্ট্যাটাস আপডেট ব্যর্থ: ' + pErr.message };
+    if (!claimed || claimed.length === 0) {
+      // অন্য একটি কনকারেন্ট রিকোয়েস্ট ইতিমধ্যে এটি প্রসেস করে ফেলেছে
+      return { ok: true, status: 'success' };
+    }
+
     const { data: mem } = await supabase.from('members').select('*').eq('phone', p.phone).single();
     const today = todayDhaka();
     const pkgDays = Number(stMap.days) || 365;
@@ -2258,21 +2773,13 @@ async function verifyPayment(supabase: any, tx: string) {
     }).eq('phone', p.phone);
     if (mErr) return { ok: false, err: 'মেম্বারশিপ আপডেট ব্যর্থ: ' + mErr.message };
 
-    const { error: pErr } = await supabase.from('payments').update({
-      status: 'success',
-      trx: res.EpsTransactionId || res.EPSTransactionId || '',
-      method: res.FinancialEntity || 'EPS',
-      done_at: new Date().toISOString()
-    }).eq('id', tx);
-    if (pErr) return { ok: false, err: 'পেমেন্ট স্ট্যাটাস আপডেট ব্যর্থ: ' + pErr.message };
-
     return { ok: true, status: 'success' };
   } else if (/fail|cancel|declin|expire|reject/.test(statusStr)) {
     await supabase.from('payments').update({
       status: 'cancelled',
       note: `EPS: ${res.Status}`,
       done_at: new Date().toISOString()
-    }).eq('id', tx);
+    }).eq('id', tx).in('status', ['pending', 'অপেক্ষায়']);
     return { ok: true, status: 'cancelled' };
   }
 

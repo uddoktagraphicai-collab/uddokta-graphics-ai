@@ -1,0 +1,16 @@
+# Prevent backend source, database schema/seed, and config files from being publicly served on Vercel
+supabase/
+.github/
+.git/
+.env
+.env.*
+.env.example
+.htaccess
+_headers
+_redirects
+README.md
+*.sql
+*.md
+scratch/
+tmp/
+temp/

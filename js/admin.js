@@ -1,13 +1,6 @@
 // --- উদ্যোক্তা গ্রাফিক্স AI — অ্যাডমিন প্যানেল (Supabase Edge Functions) ---
 // --- ১. কনফিগ, গ্লোবাল স্টেট ও ইউটিলিটি ---
-var API_URL = (function () {
-  try {
-    var p = new URLSearchParams(location.search).get('api');
-    if (p) { localStorage.setItem('UG_API_URL', p); return p; }
-  } catch (e) {}
-  return (typeof localStorage !== 'undefined' && localStorage.getItem('UG_API_URL')) ||
-    'https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api';
-})();
+var API_URL = 'https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api';
 var DEFAULT_LOGO = 'images/logos/logo.png';
 var LOGO = DEFAULT_LOGO;
 function applyAdminLogo(url) {
@@ -143,6 +136,7 @@ var I = {
   plus: ic('<path d="M12 5v14M5 12h14"/>', 2.2), back: ic('<path d="M15 5l-7 7 7 7"/>', 2.2), x: ic('<path d="M6 6l12 12M18 6 6 18"/>', 2.2),
   up: ic('<path d="M6 15l6-6 6 6"/>', 2.2), down: ic('<path d="M6 9l6 6 6-6"/>', 2.2), eye: ic('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'), eyeOff: ic('<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'),
   cld: ic('<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>'), sms: ic('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+  mail: ic('<rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/>'),
   upl: ic('<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>'),
   img: ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>'),
   ai: ic('<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/>'),
@@ -185,7 +179,7 @@ function rpc(fn, data) {
 
 function api(action, data) {
   data = data || {}; data.action = action; data.tok = A.tok;
-  var p = window.MOCK ? MOCK(data) : fetch(API_URL, { method: 'POST', body: JSON.stringify(data) }).then(function (r) { return r.text(); }).then(function (t) {
+  var p = window.MOCK ? MOCK(data) : fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }).then(function (r) { return r.text(); }).then(function (t) {
     try { return JSON.parse(t); } catch (e) { throw new Error('সার্ভার থেকে ভুল উত্তর এসেছে। API লিংক ঠিক আছে কিনা দেখুন।'); }
   });
   return p.then(function (r) {
@@ -263,6 +257,7 @@ function load(tabs, force) {
     A.eps = r.eps;
     A.cloudinary = r.cloudinary;
     A.sms = r.sms;
+    A.brevo = r.brevo;
     A.webapp = r.webapp;
   }).catch(function (e) {
     finishTopProgress();
@@ -908,7 +903,9 @@ function downloadCSV(filename, headers, rows) {
   csvContent += headers.map(function (h) { return '"' + String(h || '').replace(/"/g, '""') + '"'; }).join(',') + '\r\n';
   rows.forEach(function (row) {
     csvContent += row.map(function (cell) {
-      return '"' + String(cell == null ? '' : cell).replace(/"/g, '""') + '"';
+      var val = String(cell == null ? '' : cell);
+      if (/^[=+\-@\t\r]/.test(val)) val = "'" + val;
+      return '"' + val.replace(/"/g, '""') + '"';
     }).join(',') + '\r\n';
   });
 
@@ -2075,7 +2072,11 @@ function styleHtml() {
     '<div class="fg2">' +
     '<div class="fl"><label><span>স্টাইলের নাম</span><small>কাস্টমার এটা দেখবে</small></label>' + inp('name', 'যেমন: প্রিমিয়াম লুক') + '</div>' +
     '<div class="fl"><label><span>ID</span><small>ইংরেজিতে, ছোট, ইউনিক</small></label>' + inp('id', 'যেমন: P7') + '</div>' +
-    '<div class="fl"><label><span>ক্যাটাগরি</span></label><div class="sel"><select class="in" onchange="A.edit.s.cat=this.value;setDirty()">' + opt(A.data.cats.map(function (c) { return [c.id, c.name]; }), s.cat) + '</select></div></div>' +
+    '<div class="fl"><label><span>ক্যাটাগরি</span><small>নতুন ক্যাটাগরি তৈরি করতে + চাপুন</small></label>' +
+    '<div style="display:flex;gap:6px;align-items:center">' +
+      '<div class="sel" style="flex:1"><select class="in" onchange="A.edit.s.cat=this.value;setDirty()">' + opt(A.data.cats.map(function (c) { return [c.id, c.name]; }), s.cat) + '</select></div>' +
+      '<button type="button" class="btn sm pri" onclick="quickAddCategory()" title="নতুন ক্যাটাগরি যোগ করুন" style="padding:0 10px;height:42px;display:inline-flex;align-items:center;gap:4px;flex-shrink:0">' + I.plus + 'নতুন</button>' +
+    '</div></div>' +
     '<div class="fl"><label><span>কাস্টমার ChatGPT-তে সাথে দিবে</span></label>' + inp('attach', 'যেমন: লোগো আর প্রোডাক্টের ছবি') + '</div>' +
     '<div class="fl"><label><span>লোগোর জায়গা</span></label><div class="sel"><select class="in" onchange="A.edit.s.logo=this.value;setDirty()">' + opt(LOGO_POS, s.logo) + '</select></div></div>' +
     '<div class="fl"><label><span>হেডলাইনের ফন্ট</span></label><div class="sel"><select class="in" onchange="A.edit.s.font1=this.value;setDirty()">' + opt(FONT5, s.font1) + '</select></div></div>' +
@@ -2093,6 +2094,66 @@ function styleHtml() {
 }
 function redrawStyle() { $('am').innerHTML = styleHtml(); AF.style(); if (A.dirty) $('savebar').classList.add('dirty'); }
 AF.style = function () { drawFields(); drawTest(); };
+
+window.quickAddCategory = function () {
+  modal('<h3>নতুন ক্যাটাগরি তৈরি করুন</h3>' +
+    '<p class="hint2" style="margin:4px 0 14px">নতুন ক্যাটাগরির নাম দিন, এটি অ্যাপের উপরে মেনুতে এবং স্টাইল ফিল্টারে সরাসরি যুক্ত হবে।</p>' +
+    '<div class="fl"><label><span>ক্যাটাগরির নাম (বাংলায়)</span><small>যেমন: গ্যাজেট, লাইফস্টাইল, অফার</small></label>' +
+      '<input class="in" id="m_new_cat_name" placeholder="যেমন: গ্যাজেট" oninput="window.autoSlugCat(this.value)"></div>' +
+    '<div class="fl" style="margin-top:10px"><label><span>ক্যাটাগরি ID (ইংরেজিতে ইউনিক)</span><small>যেমন: gadget</small></label>' +
+      '<input class="in" id="m_new_cat_id" placeholder="যেমন: gadget"></div>' +
+    '<div class="macts" style="margin-top:16px;justify-content:flex-end;gap:8px">' +
+      '<a class="btn sm sec" onclick="closeModal()">বাতিল</a>' +
+      '<a class="btn sm pri" id="m_new_cat_save">ক্যাটাগরি সেভ করুন</a>' +
+    '</div>');
+
+  setTimeout(function () { var el = $('m_new_cat_name'); if (el) el.focus(); }, 60);
+
+  window.autoSlugCat = function (val) {
+    var idInp = $('m_new_cat_id');
+    if (!idInp || idInp._manual) return;
+    var slug = String(val || '').toLowerCase().trim()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    idInp.value = slug;
+  };
+
+  var idEl = $('m_new_cat_id');
+  if (idEl) idEl.oninput = function () { this._manual = true; };
+
+  var saveBtn = $('m_new_cat_save');
+  if (saveBtn) {
+    saveBtn.onclick = function () {
+      var name = ($('m_new_cat_name') ? $('m_new_cat_name').value : '').trim();
+      var id = ($('m_new_cat_id') ? $('m_new_cat_id').value : '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+      if (!name) return toast('ক্যাটাগরির নাম দিন', 1);
+      if (!id) return toast('ইংরেজিতে ছোট একটি ID দিন (যেমন: gadget)', 1);
+
+      var exists = (A.data.cats || []).some(function (c) { return String(c.id).toLowerCase() === id || c.name === name; });
+      if (exists) return toast('এই নামের বা ID-র ক্যাটাগরি ইতিমধ্যে আছে', 1);
+
+      var currentCats = (A.data.cats || []).map(function (c) {
+        return { id: c.id, name: c.name, show: c.show || 'TRUE', order: String(c.order || '1') };
+      });
+      var newOrder = String(currentCats.length + 1);
+      var newCat = { id: id, name: name, show: 'TRUE', order: newOrder };
+      currentCats.push(newCat);
+
+      saveBtn.classList.add('loading');
+      call('a_save', { tab: 'cats', rows: currentCats }, 'নতুন ক্যাটাগরি যোগ হয়েছে ✓').then(function () {
+        A.data.cats = currentCats;
+        closeModal();
+        if (A.edit && A.edit.s) {
+          A.edit.s.cat = id;
+          setDirty();
+          redrawStyle();
+        }
+      }).catch(function () {
+        saveBtn.classList.remove('loading');
+      });
+    };
+  }
+};
 function elOf(k) { return ELEMENTS.filter(function (e) { return e.k === k; })[0] || ELEMENTS[0]; }
 function drawFields() {
   var E = A.edit;
@@ -3744,17 +3805,12 @@ window.updateSmsTplPreview = function () {
 };
 
 window.saveSms = function () {
-  var s = kv('settings');
   var tokenIn = ($('sms_token') ? $('sms_token').value : '').trim();
   var senderIn = ($('sms_sender') ? $('sms_sender').value : '').trim();
   var urlIn = ($('sms_url') ? $('sms_url').value : '').trim();
   var tplIn = ($('sms_template') ? $('sms_template').value : '').trim();
 
-  var finalToken = tokenIn;
-  if (!finalToken || finalToken.indexOf('••••') === 0) {
-    finalToken = s.sms_api_token || '';
-  }
-
+  var finalToken = (tokenIn && tokenIn.indexOf('••••') !== 0) ? tokenIn : '';
   if (!finalToken && !(A.sms && A.sms.ready)) {
     return toast('BulkSMSBD API Key পূরণ করুন', 1);
   }
@@ -3763,23 +3819,13 @@ window.saveSms = function () {
   var finalUrl = urlIn || 'https://bulksmsbd.net/api/smsapi';
   var finalTpl = tplIn || 'উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।';
 
-  var rows = [
-    { key: 'sms_sender_id', value: finalSender },
-    { key: 'sms_api_url', value: finalUrl },
-    { key: 'sms_otp_template', value: finalTpl }
-  ];
-  if (finalToken) {
-    rows.unshift({ key: 'sms_api_token', value: finalToken });
-  }
+  var payload = { senderId: finalSender, url: finalUrl, template: finalTpl };
+  if (finalToken) payload.token = finalToken;
 
-  busy(1);
-  call('a_save', { tab: 'settings', rows: rows }, 'BulkSMSBD কনফিগারেশন সেভ হয়েছে ✓').then(function () {
-    api('a_sms', { sms: { token: finalToken, senderId: finalSender, url: finalUrl, template: finalTpl } }).catch(function () {});
+  call('a_sms', { sms: payload }, 'BulkSMSBD কনফিগারেশন সেভ হয়েছে ✓').then(function () {
+    A.data.settings = null;
     render('settings');
-  }).catch(function (e) {
-    busy(0);
-    toast(e.message || 'সেভ করতে সমস্যা হয়েছে', 1);
-  });
+  }).catch(function () {});
 };
 
 function translateSmsErr(code, orig) {
@@ -3797,57 +3843,37 @@ function translateSmsErr(code, orig) {
 }
 
 window.checkBulkSmsBalance = function () {
-  var s = kv('settings');
-  var token = ($('sms_token') ? $('sms_token').value.trim() : '') || s.sms_api_token || '';
   var stBox = $('sms_test_status');
   if (!stBox) return;
-
-  if (!token || token.indexOf('••••') === 0) {
-    stBox.style.display = 'block';
-    stBox.style.background = 'rgba(239, 68, 68, 0.12)';
-    stBox.style.color = '#ef4444';
-    stBox.style.border = '1px solid rgba(239, 68, 68, 0.25)';
-    stBox.innerHTML = '⚠️ BulkSMSBD API Key পাওয়া যায়নি। আগে সেটিংস ঘরে আপনার API Key বসিয়ে সেভ করুন।';
-    return;
-  }
 
   stBox.style.display = 'block';
   stBox.style.background = 'var(--bg3)';
   stBox.style.color = 'var(--ink)';
   stBox.style.border = '1px solid var(--bdr)';
-  stBox.innerHTML = '⏳ ব্যালেন্স চেক করা হচ্ছে...';
+  stBox.innerHTML = '⏳ সার্ভারের মাধ্যমে ব্যালেন্স চেক করা হচ্ছে...';
 
-  var url = 'https://bulksmsbd.net/api/getBalanceApi?api_key=' + encodeURIComponent(token);
-  fetch(url).then(function (res) {
-    return res.json();
-  }).then(function (data) {
-    if (data.response_code === 202) {
+  api('a_health').then(function (r) {
+    var sms = r && r.sms;
+    if (sms && sms.ok && sms.balance !== null && sms.balance !== undefined) {
       stBox.style.background = 'rgba(34, 197, 94, 0.12)';
       stBox.style.color = '#22c55e';
       stBox.style.border = '1px solid rgba(34, 197, 94, 0.25)';
-      stBox.innerHTML = '✓ <b>আপনার BulkSMSBD ব্যালেন্স: ৳ ' + esc(data.balance || '0.00') + '</b><br><small style="color:var(--ink2)">কানেকশন ও API Key একদম ঠিক আছে।</small>';
+      stBox.innerHTML = '✓ <b>আপনার BulkSMSBD ব্যালেন্স: ৳ ' + esc(sms.balance) + '</b><br><small style="color:var(--ink2)">কানেকশন ও API Key একদম ঠিক আছে।</small>';
     } else {
-      var msg = translateSmsErr(data.response_code, data.error_message);
       stBox.style.background = 'rgba(239, 68, 68, 0.12)';
       stBox.style.color = '#ef4444';
       stBox.style.border = '1px solid rgba(239, 68, 68, 0.25)';
-      stBox.innerHTML = '✕ <b>ব্যালেন্স চেক ব্যর্থ (' + esc(data.response_code) + '):</b> ' + esc(msg);
+      stBox.innerHTML = '✕ <b>ব্যালেন্স চেক ব্যর্থ:</b> ' + esc((sms && sms.err) || 'আগে BulkSMSBD API Key সেভ করুন');
     }
   }).catch(function (err) {
     stBox.style.background = 'rgba(239, 68, 68, 0.12)';
     stBox.style.color = '#ef4444';
     stBox.style.border = '1px solid rgba(239, 68, 68, 0.25)';
-    stBox.innerHTML = '✕ <b>নেটওয়ার্ক সমস্যা:</b> BulkSMSBD সার্ভারে যোগাযোগ করা সম্ভব হয়নি (' + esc(err.message) + ')';
+    stBox.innerHTML = '✕ <b>নেটওয়ার্ক সমস্যা:</b> ' + esc(err.message);
   });
 };
 
 window.sendBulkSmsTest = function () {
-  var s = kv('settings');
-  var token = ($('sms_token') ? $('sms_token').value.trim() : '') || s.sms_api_token || '';
-  var senderId = ($('sms_sender') ? $('sms_sender').value.trim() : '') || s.sms_sender_id || '';
-  var apiUrl = ($('sms_url') ? $('sms_url').value.trim() : '') || s.sms_api_url || 'https://bulksmsbd.net/api/smsapi';
-  var template = ($('sms_template') ? $('sms_template').value.trim() : '') || s.sms_otp_template || 'উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।';
-
   var phInput = $('test_sms_ph');
   var stBox = $('sms_test_status');
   var sendBtn = $('btn_send_test');
@@ -3865,46 +3891,29 @@ window.sendBulkSmsTest = function () {
     return;
   }
 
-  if (!token || token.indexOf('••••') === 0) {
-    stBox.style.display = 'block';
-    stBox.style.background = 'rgba(239, 68, 68, 0.12)';
-    stBox.style.color = '#ef4444';
-    stBox.style.border = '1px solid rgba(239, 68, 68, 0.25)';
-    stBox.innerHTML = '⚠️ BulkSMSBD API Key দেওয়া নেই। আগে সেটিংস ঘরে API Key বসিয়ে সেভ করুন।';
-    return;
-  }
-
   stBox.style.display = 'block';
   stBox.style.background = 'var(--bg3)';
   stBox.style.color = 'var(--ink)';
   stBox.style.border = '1px solid var(--bdr)';
-  stBox.innerHTML = '⏳ গেটওয়েতে টেস্ট ওটিপি পাঠানো হচ্ছে...';
+  stBox.innerHTML = '⏳ সার্ভারের মাধ্যমে টেস্ট ওটিপি পাঠানো হচ্ছে...';
   if (sendBtn) sendBtn.disabled = true;
 
-  var sampleOtp = '1234';
-  var finalMsg = template.indexOf('{otp}') > -1 ? template.replace(/\{otp\}/g, sampleOtp) : (template + ' ' + sampleOtp);
-  var formattedPhone = '88' + ph;
-
-  var bodyParams = new URLSearchParams({
-    api_key: token,
-    type: 'text',
-    number: formattedPhone,
-    senderid: senderId || '',
-    message: finalMsg
-  });
-
-  fetch(apiUrl, {
-    method: 'POST',
-    body: bodyParams
-  }).then(function (res) {
-    return res.json();
-  }).then(function (data) {
+  api('a_sms_test', { phone: ph }).then(function (r) {
     if (sendBtn) sendBtn.disabled = false;
-    if (data.response_code === 202) {
+    if (!r || !r.ok) {
+      stBox.style.background = 'rgba(239, 68, 68, 0.12)';
+      stBox.style.color = '#ef4444';
+      stBox.style.border = '1px solid rgba(239, 68, 68, 0.25)';
+      stBox.innerHTML = '✕ <b>ব্যর্থ:</b> ' + esc((r && r.err) || 'আগে BulkSMSBD API Key সেভ করুন');
+      return;
+    }
+    var data = r.data || {};
+    var finalMsg = r.sentMessage || '';
+    if (Number(data.response_code) === 202 || (!data.response_code && r.ok)) {
       stBox.style.background = 'rgba(34, 197, 94, 0.12)';
       stBox.style.color = '#22c55e';
       stBox.style.border = '1px solid rgba(34, 197, 94, 0.25)';
-      stBox.innerHTML = '✓ <b>টেস্ট এসএমএস সফলভাবে পাঠানো হয়েছে!</b><br><small style="color:var(--ink2)">প্রাপক নম্বর: ' + esc(formattedPhone) + ' · স্ট্যাটাস: 202 Success</small>';
+      stBox.innerHTML = '✓ <b>টেস্ট এসএমএস সফলভাবে পাঠানো হয়েছে!</b><br><small style="color:var(--ink2)">প্রাপক নম্বর: 88' + esc(ph) + ' · স্ট্যাটাস: 202 Success</small>';
       toast('টেস্ট এসএমএস পাঠানো হয়েছে ✓');
       var isUni = /[^\u0000-\u007F]/.test(finalMsg);
       var msgParts = isUni ? (finalMsg.length <= 70 ? 1 : Math.ceil(finalMsg.length / 67)) : (finalMsg.length <= 160 ? 1 : Math.ceil(finalMsg.length / 153));
@@ -3968,6 +3977,107 @@ window.testSms = function () {
   modal(modalHtml);
 };
 
+window.saveBrevo = function () {
+  var keyIn = ($('brevo_key') ? $('brevo_key').value : '').trim();
+  var emailIn = ($('brevo_sender_email') ? $('brevo_sender_email').value : '').trim();
+  var nameIn = ($('brevo_sender_name') ? $('brevo_sender_name').value : '').trim();
+  var s = kv('settings');
+
+  var finalKey = (keyIn && keyIn.indexOf('••••') !== 0) ? keyIn : '';
+  if (!finalKey && !(s.brevo_api_key || (A.brevo && A.brevo.ready))) {
+    return toast('Brevo API Key পূরণ করুন', 1);
+  }
+  if (!emailIn) {
+    return toast('Sender Email লিখুন (যেমন: uddoktagraphicai@gmail.com)', 1);
+  }
+
+  var payload = { senderEmail: emailIn, senderName: nameIn || 'উদ্যোক্তা গ্রাফিক্স AI' };
+  if (finalKey) payload.apiKey = finalKey;
+
+  call('a_brevo', { brevo: payload }, 'Brevo ইমেইল কনফিগারেশন সেভ হয়েছে ✓').then(function () {
+    A.data.settings = null;
+    render('settings');
+  }).catch(function () {
+    var rows = [
+      { key: 'brevo_sender_email', value: emailIn },
+      { key: 'brevo_sender_name', value: nameIn || 'উদ্যোক্তা গ্রাফিক্স AI' }
+    ];
+    if (finalKey) rows.push({ key: 'brevo_api_key', value: finalKey });
+    return call('a_save', { tab: 'settings', rows: rows }, 'Brevo ইমেইল কনফিগারেশন সেভ হয়েছে ✓').then(function () {
+      A.data.settings = null;
+      render('settings');
+    });
+  });
+};
+
+window.testBrevo = function () {
+  var s = kv('settings');
+  var curEmail = ($('brevo_sender_email') ? $('brevo_sender_email').value.trim() : '') || (A.brevo && A.brevo.senderEmail) || s.brevo_sender_email || '';
+
+  var modalHtml = '<div style="max-width:480px">' +
+    '<h3 style="margin:0 0 4px;font-size:17px;font-weight:700">Brevo ইমেইল ওটিপি টেস্ট</h3>' +
+    '<p style="margin:0 0 14px;font-size:12.5px;color:var(--mut)">Brevo API দিয়ে আপনার যেকোনো ইমেইলে একটি লাইভ টেস্ট ওটিপি পাঠিয়ে সংযোগ পরীক্ষা করুন।</p>' +
+    '<div class="fl" style="margin-bottom:12px">' +
+      '<label><span>প্রাপকের ইমেইল এড্রেস</span><small>যেখানে টেস্ট মেইল পাঠাবেন</small></label>' +
+      '<input class="in" id="test_brevo_to" type="email" placeholder="যেমন: yourname@gmail.com" value="' + esc(curEmail) + '" autocomplete="off" style="font-size:14px">' +
+    '</div>' +
+    '<div id="brevo_test_status" style="display:none;margin-bottom:14px;padding:11px 13px;border-radius:8px;font-size:12.5px;line-height:1.5"></div>' +
+    '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px">' +
+      '<button type="button" class="btn sm sec" onclick="closeModal()">বাতিল</button>' +
+      '<button type="button" class="btn sm" id="btn_send_brevo_test" onclick="window.sendBrevoTest()">✉️ টেস্ট ইমেইল পাঠান</button>' +
+    '</div>' +
+  '</div>';
+
+  modal(modalHtml);
+};
+
+window.sendBrevoTest = function () {
+  var to = ($('test_brevo_to') ? $('test_brevo_to').value : '').trim();
+  var stBox = $('brevo_test_status');
+  var btn = $('btn_send_brevo_test');
+
+  if (!to || to.indexOf('@') === -1) {
+    return toast('সঠিক ইমেইল এড্রেস লিখুন', 1);
+  }
+
+  if (stBox) {
+    stBox.style.display = 'block';
+    stBox.style.background = 'var(--bg3)';
+    stBox.style.color = 'var(--ink)';
+    stBox.style.border = '1px solid var(--bdr)';
+    stBox.innerHTML = '⏳ Brevo API-তে রিকোয়েস্ট পাঠানো হচ্ছে...';
+  }
+  if (btn) btn.classList.add('loading');
+
+  api('a_email_test', { to: to }).then(function (r) {
+    if (btn) btn.classList.remove('loading');
+    if (r && r.ok) {
+      if (stBox) {
+        stBox.style.background = 'rgba(34, 197, 94, 0.12)';
+        stBox.style.color = '#22c55e';
+        stBox.style.border = '1px solid rgba(34, 197, 94, 0.25)';
+        stBox.innerHTML = '✓ <b>ইমেইল সফলভাবে পাঠানো হয়েছে!</b><br><small style="color:var(--ink2)">অনুগ্রহ করে <b>' + esc(to) + '</b> ইনবক্স বা স্প্যাম ফোল্ডার চেক করুন। Message ID: ' + esc(r.id || 'N/A') + '</small>';
+      }
+      toast('টেস্ট ইমেইল সফলভাবে পাঠানো হয়েছে ✓');
+    } else {
+      if (stBox) {
+        stBox.style.background = 'rgba(239, 68, 68, 0.12)';
+        stBox.style.color = '#ef4444';
+        stBox.style.border = '1px solid rgba(239, 68, 68, 0.25)';
+        stBox.innerHTML = '✕ <b>ব্যর্থ হয়েছে:</b> ' + esc((r && r.err) || 'Brevo API ত্রুটি');
+      }
+    }
+  }).catch(function (err) {
+    if (btn) btn.classList.remove('loading');
+    if (stBox) {
+      stBox.style.background = 'rgba(239, 68, 68, 0.12)';
+      stBox.style.color = '#ef4444';
+      stBox.style.border = '1px solid rgba(239, 68, 68, 0.25)';
+      stBox.innerHTML = '✕ <b>নেটওয়ার্ক সমস্যা:</b> ' + esc(err.message);
+    }
+  });
+};
+
 P.settings = function () {
   return load(['settings'], true).then(function () {
     var s = kv('settings');
@@ -4027,6 +4137,21 @@ P.settings = function () {
       return '<div class="fl"><label><span>' + l + '</span>' + (n ? '<small>' + n + '</small>' : '') + '</label>' + inpHtml + '</div>';
     };
 
+    // Brevo (Email OTP for Expatriate/Overseas customers)
+    var brevo = A.brevo || {};
+    var hasBrevo = Boolean(s.brevo_api_key || s.brevo_sender_email || (brevo && brevo.ready));
+    var curBrevoEmail = s.brevo_sender_email || brevo.senderEmail || '';
+    var curBrevoName = s.brevo_sender_name || brevo.senderName || 'উদ্যোক্তা গ্রাফিক্স AI';
+
+    var bf = function (id, l, n, ph, val, type) {
+      var isPass = type === 'password';
+      var inpHtml = '<input class="in" id="' + id + '" type="' + (type || 'text') + '" autocomplete="off" value="' + esc(val || '') + '" placeholder="' + (hasBrevo && isPass ? 'বসানো আছে · বদলাতে চাইলে নতুনটা লিখুন' : esc(ph || '')) + '">';
+      if (isPass) {
+        inpHtml = '<div class="pass-wrap">' + inpHtml + '<button type="button" class="eye-btn" onclick="togglePass(\'' + id + '\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div>';
+      }
+      return '<div class="fl"><label><span>' + l + '</span>' + (n ? '<small>' + n + '</small>' : '') + '</label>' + inpHtml + '</div>';
+    };
+
     return ah('সেটিংস', 'দাম, মেয়াদ, পেমেন্ট, ক্লাউডিনারি, এসএমএস ও নিরাপত্তা') +
       '<div class="g2b" style="margin-top:0">' +
         // Row 1, Col 1: মেম্বারশিপ আর অ্যাপ
@@ -4055,7 +4180,7 @@ P.settings = function () {
 
         // Row 2, Col 2: SMS OTP Gateway (BulkSMSBD)
         '<div class="pn"><h3>BulkSMSBD ওটিপি গেটওয়ে</h3><div class="lock" style="margin-bottom:6px">' + (hasSms ? I.chk + '<div>BulkSMSBD সক্রিয় · সেন্ডার আইডি: <b style="color:var(--ink)">' + esc(curSender || 'ডিফল্ট / নন-মাস্কিং') + '</b></div>' : I.sms + '<div>BulkSMSBD এখনো কনফিগার করা হয়নি। ওটিপি পাঠানোর জন্য তথ্য দিন।</div>') + '</div>' +
-        sf('sms_token', 'BulkSMSBD API Key', 'BulkSMSBD ড্যাশবোর্ডের API Key', 'API Key লিখুন', s.sms_api_token || (sms.apiToken && !sms.apiToken.startsWith('••••') ? sms.apiToken : ''), 'password') +
+        sf('sms_token', 'BulkSMSBD API Key', 'BulkSMSBD ড্যাশবোর্ডের API Key (সেভ করার পর নিরাপদে থাকবে)', 'API Key লিখুন', '', 'password') +
         '<div class="fg2">' + sf('sms_sender', 'Sender ID', 'অনুমোদিত সেন্ডার আইডি / মাস্কিং নেম', 'যেমন: 8809612xxxxxx বা আপনার নাম', curSender) + sf('sms_url', 'API URL (ঐচ্ছিক)', 'ডিফল্ট: https://bulksmsbd.net/api/smsapi', 'https://bulksmsbd.net/api/smsapi', curUrl) + '</div>' +
         '<div class="fl" style="margin-top:8px"><label><span>ওটিপি মেসেজ ফরম্যাট (OTP Template)</span><small>মেসেজে <code>{otp}</code> কোড স্বয়ংক্রিয়ভাবে বসে যাবে</small></label>' +
         '<textarea class="in" id="sms_template" rows="2" style="height:auto;min-height:65px;padding-top:10px;line-height:1.5" placeholder="উদ্যোক্তা গ্রাফিক্স AI তে আপনার ওটিপি কোড: {otp}। মেয়াদ ৫ মিনিট।" oninput="window.updateSmsTplPreview()">' + esc(curTpl) + '</textarea>' +
@@ -4064,8 +4189,18 @@ P.settings = function () {
         '<p class="hint2">কাস্টমার লগইনের সময় ৪ ডিজিটের ওটিপি স্বয়ংক্রিয়ভাবে এই ফরম্যাটে BulkSMSBD দিয়ে পাঠানো হবে।</p></div>' +
       '</div>' +
 
-      // Row 3: Facebook / Meta Pixel + অ্যাডমিন পাসওয়ার্ড বদলান
+      // Row 3: Brevo ইমেইল ওটিপি গেটওয়ে + Facebook / Meta Pixel
       '<div class="g2b" style="margin-top:16px">' +
+        // Row 3, Col 1: Brevo ইমেইল ওটিপি গেটওয়ে (প্রবাসী কাস্টমারদের জন্য)
+        '<div class="pn"><h3>Brevo ইমেইল ওটিপি গেটওয়ে <span class="h3s" style="color:var(--or);font-weight:600">প্রবাসী কাস্টমারদের জন্য</span></h3>' +
+        '<div class="lock" style="margin-bottom:6px">' + (hasBrevo ? I.chk + '<div>Brevo সক্রিয় · প্রেরক: <b style="color:var(--ink)">' + esc(curBrevoEmail || 'ecomdesignsolution@gmail.com') + '</b></div>' : I.mail + '<div>Brevo এখনো কনফিগার করা হয়নি। প্রবাসী ইউজারদের ইমেইল ওটিপির জন্য তথ্য দিন।</div>') + '</div>' +
+        bf('brevo_key', 'Brevo API Key', 'Brevo ড্যাশবোর্ডের API Key (সেভ করার পর নিরাপদে থাকবে)', 'xkeysib-... লিখুন', '', 'password') +
+        '<div class="fg2">' + bf('brevo_sender_email', 'Sender Email', 'Brevo ভেরিফাইড প্রেরক ইমেইল', 'যেমন: ecomdesignsolution@gmail.com', curBrevoEmail) +
+        bf('brevo_sender_name', 'Sender Name', 'ইমেইলে যে নাম দেখাবে', 'উদ্যোক্তা গ্রাফিক্স AI', curBrevoName) + '</div>' +
+        '<div class="tacts" style="margin-top:12px"><a class="btn sm" onclick="saveBrevo()">Brevo তথ্য সেভ করুন</a><a class="btn sm sec" onclick="testBrevo()">টেস্ট ইমেইল পাঠান</a></div>' +
+        '<p class="hint2">সৌদি আরব বা বিদেশের প্রবাসী কাস্টমাররা বাংলাদেশি সিম না থাকায় ইমেইলে ওটিপি কোড পাবেন। ওটিপি জীবনে একবারই লাগবে, পরবর্তীতে পাসওয়ার্ড দিয়ে লগইন করবেন।</p></div>' +
+
+        // Row 3, Col 2: Facebook / Meta Pixel
         '<div class="pn"><h3>Facebook / Meta Pixel</h3>' +
         '<div class="lock" style="margin-bottom:6px">' + (s.meta_pixel_id ? I.chk + '<div>Meta Pixel সক্রিয় · Pixel ID: <b class="trx" style="color:var(--ink)">' + esc(s.meta_pixel_id) + '</b></div>' : I.globe + '<div>Meta Pixel এখনো বসানো হয়নি। Facebook Events Manager থেকে আপনার Pixel ID এনে বসান।</div>') + '</div>' +
         '<div class="fl"><label><span>Meta Pixel ID</span><small>শুধু সংখ্যা (খালি রাখলে বন্ধ থাকবে)</small></label><input class="in" id="fb_pixel_id" inputmode="numeric" autocomplete="off" value="' + esc(s.meta_pixel_id || '') + '" placeholder="যেমন: 1234567890123456"></div>' +
@@ -4074,11 +4209,17 @@ P.settings = function () {
         '</div>' +
         '<div class="tacts" style="margin-top:12px"><a class="btn sm" onclick="saveMetaPixel()">Meta Pixel সেভ করুন</a>' + (s.meta_pixel_id ? '<a class="btn sm red" onclick="clearMetaPixel()">বন্ধ করুন</a>' : '') + '</div>' +
         '<p class="hint2">ল্যান্ডিং পেজ ও কাস্টমার অ্যাপে স্বয়ংক্রিয়ভাবে চলবে। অ্যাডমিন প্যানেলে লোড হবে না, যাতে অ্যাড ডেটা নষ্ট না হয়।</p></div>' +
+      '</div>' +
 
+      // Row 4: অ্যাডমিন পাসওয়ার্ড বদলান
+      '<div class="g2b" style="margin-top:16px">' +
         '<div class="pn"><h3>অ্যাডমিন পাসওয়ার্ড বদলান</h3>' +
         '<div class="fl"><label><span>বর্তমান পাসওয়ার্ড</span></label><div class="pass-wrap"><input class="in" id="po" type="password" placeholder="বর্তমান পাসওয়ার্ড লিখুন"><button type="button" class="eye-btn" onclick="togglePass(\'po\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div></div>' +
         '<div class="fl"><label><span>নতুন পাসওয়ার্ড</span><small>কমপক্ষে ৮ অক্ষর</small></label><div class="pass-wrap"><input class="in" id="pn1" type="password" placeholder="নতুন পাসওয়ার্ড লিখুন (কমপক্ষে ৮ অক্ষর)"><button type="button" class="eye-btn" onclick="togglePass(\'pn1\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div></div>' +
         '<div class="tacts"><a class="btn sm" onclick="savePass()">পাসওয়ার্ড বদলান</a></div></div>' +
+        '<div class="pn"><h3>সিস্টেম ও সাপোর্ট ইনফো</h3>' +
+        '<p style="font-size:13px;color:var(--ink2);line-height:1.6">উদ্যোক্তা গ্রাফিক্স AI প্ল্যাটফর্মের সকল এপিআই, ক্লাউড স্টোরেজ, এসএমএস ও ইমেইল গেটওয়ে এই প্যানেল থেকে লাইভ কনফিগার করা যায়। কোনো সমস্যা হলে সার্ভার লগ ও ড্যাশবোর্ড অডিট চেক করুন।</p>' +
+        '</div>' +
       '</div>' +
 
       // Row 3.5: অ্যাপ লোগো ও EPS পেমেন্ট ব্যানার ম্যানেজার

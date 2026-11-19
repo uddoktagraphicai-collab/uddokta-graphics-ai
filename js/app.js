@@ -2,20 +2,14 @@ var TX = {}; try { TX = (JSON.parse(localStorage.getItem('eds_c3')) || {}).texts
 function T(k, d, h) { var v = TX[k]; v = String(v != null && v !== '' ? v : d).replace(/[<>"]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); if (h) v = v.replace(/\*([^*]+)\*/g, '<' + h + ' class="o">$1</' + h + '>'); return v; }
 // --- উদ্যোক্তা গ্রাফিক্স AI — ক্লায়েন্ট অ্যাপ (Supabase Edge Functions) ---
 // --- ১. কনফিগ, গ্লোবাল স্টেট ও হেল্পার ফাংশন ---
-var API_URL = (function () {
-  try {
-    var p = new URLSearchParams(location.search).get('api');
-    if (p) { localStorage.setItem('UG_API_URL', p); return p; }
-  } catch (e) {}
-  return (typeof localStorage !== 'undefined' && localStorage.getItem('UG_API_URL')) ||
-    'https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api';
-})();
+var API_URL = 'https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api';
 var $ = function (id) { return document.getElementById(id); };
 var S = { phone: '', member: null, c: null, tpl: null, cmd: '', copied: false, filter: 'all', after: '', setup: null, payPending: false };
 var LS = { get: function (k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }, set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }, del: function (k) { try { localStorage.removeItem(k); } catch (e) {} } };
 var BN = function (n) { return String(n == null ? '' : n).replace(/\d/g, function (d) { return '০১২৩৪৫৬৭৮৯'[d]; }); };
 var MON = [(T('t3bd0acef', 'জানুয়ারি')), (T('ta15e222b', 'ফেব্রুয়ারি')), (T('t2d929504', 'মার্চ')), (T('t6d596cff', 'এপ্রিল')), (T('t2f4e0226', 'মে')), (T('tbc0c9bc6', 'জুন')), (T('t8b7dbf28', 'জুলাই')), (T('t405f1ca2', 'আগস্ট')), (T('t504232b6', 'সেপ্টেম্বর')), (T('t65abe4cf', 'অক্টোবর')), (T('tdfddf529', 'নভেম্বর')), (T('ta04b807e', 'ডিসেম্বর'))];
 var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+var safeHref = function (u) { var s = String(u || '').trim(); return /^(https?:\/\/|\/|#|mailto:|tel:)/i.test(s) ? s : '#'; };
 
 function imgUrl(u) {
   if (!u || typeof u !== 'string') return u || '';
@@ -235,7 +229,7 @@ function busy(on, text) {
     }, 220);
   }
 }
-function toast(m, err) { var t = $('toast'); t.innerHTML = m; t.className = 'toast show' + (err ? ' err' : ''); clearTimeout(t._t); t._t = setTimeout(function () { t.className = 'toast'; }, err ? 5000 : 2400); }
+function toast(m, err) { var t = $('toast'); t.textContent = String(m == null ? '' : m); t.className = 'toast show' + (err ? ' err' : ''); clearTimeout(t._t); t._t = setTimeout(function () { t.className = 'toast'; }, err ? 5000 : 2400); }
 var MON_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 function fmtDate(s) {
   if (!s) return '';
@@ -396,7 +390,7 @@ V.home = function () {
   var mob = paid() ? ('<a class="btn newd" data-go="style"><span class="plus">+</span>' + T('t316fbe7c', 'নতুন ডিজাইন বানান')) + I.arr + '</a>'
     : ('<div class="monly"><a class="btn" data-go="member" style="margin-top:16px">' + T('t925d8832', 'মেম্বারশিপ নিন · ৳')) + BN(price()) + (T('t95c37f70', '/বছর')) + I.arr + ('</a><a class="btn sec" data-go="style">' + T('tbea7246b', 'আগে স্টাইলগুলো দেখুন') + '</a></div>');
   var P = c.posts || [];
-  var ups = P.length ? ('<div class="sec"><h2>' + T('t92e2981f', 'সর্বশেষ আপডেট') + '</h2></div><div class="ups">') + P.map(function (p) { return '<a class="up" href="' + esc(p.link || '#') + '" target="_blank" rel="noopener">' + (p.img ? '<img src="' + esc(imgUrl(p.img)) + '" alt="" loading="lazy">' : '<div class="ph"></div>') + '<div><small>' + esc(p.tag) + '</small><p>' + esc(p.title) + '</p></div></a>'; }).join('') + '</div>' : '';
+  var ups = P.length ? ('<div class="sec"><h2>' + T('t92e2981f', 'সর্বশেষ আপডেট') + '</h2></div><div class="ups">') + P.map(function (p) { return '<a class="up" href="' + esc(safeHref(p.link || '#')) + '" target="_blank" rel="noopener noreferrer">' + (p.img ? '<img src="' + esc(imgUrl(p.img)) + '" alt="" loading="lazy">' : '<div class="ph"></div>') + '<div><small>' + esc(p.tag) + '</small><p>' + esc(p.title) + '</p></div></a>'; }).join('') + '</div>' : '';
   var title = paid() ? (T('tc743244a', 'আজকে কোন *ডিজাইনটা* বানাবেন?', 'span')) : (T('ta78ba8e4', 'অ্যাপটা *ঘুরে দেখুন*', 'span'));
   var sub = paid() ? (T('t2ef7839e', 'স্টাইল বেছে নিন, কয়েকটা ঘর পূরণ করুন, কমান্ড রেডি।')) : (T('t2bfbbdef', 'সব স্টাইল আর কোন স্টাইলে কী লিখতে হয়, দেখে নিন। কমান্ড বানাতে মেম্বারশিপ লাগবে।'));
   if (S.payPending && !paid()) sub = (T('t89f7a3bc', 'আপনার পেমেন্ট যাচাই হচ্ছে। চালু হলেই সব খুলে যাবে।'));
@@ -492,36 +486,40 @@ V.login = function () {
     ((S.c && S.c.tpls) || []).filter(function (t) { return t.img; }).slice(0, 4).map(function (t) { return '<img src="' + esc(imgUrl(t.img)) + '" alt="">'; }).join('') + '</div></aside>';
 
   var formBody = '';
+  var isEmail = Boolean(PENDING_PHONE && PENDING_PHONE.indexOf('@') !== -1);
+  var targetLabel = isEmail ? esc(PENDING_PHONE) : ('+৮৮ ' + esc(PENDING_PHONE));
+  var changeLabel = isEmail ? 'ইমেইল পরিবর্তন' : 'নম্বর পরিবর্তন';
+
   if (LOGIN_STEP === 'otp') {
-    formBody = '<a class="lback" onclick="editPhone()" style="display:inline-flex;cursor:pointer">' + I.back + 'নম্বর পরিবর্তন</a>' +
+    formBody = '<a class="lback" onclick="editPhone()" style="display:inline-flex;cursor:pointer">' + I.back + changeLabel + '</a>' +
       '<div class="h1">ওটিপি কোড <em>লিখুন</em></div>' +
-      '<div class="sub"><span style="color:var(--ink);font-weight:700">+৮৮ ' + esc(PENDING_PHONE) + '</span> নম্বরে ৪ সংখ্যার ওটিপি পাঠানো হয়েছে।</div>' +
+      '<div class="sub"><span style="color:var(--ink);font-weight:700">' + targetLabel + '</span>-এ ৪ সংখ্যার ওটিপি পাঠানো হয়েছে।</div>' +
       '<div class="fl"><label><span>৪ সংখ্যার ওটিপি কোড</span></label><input class="in otp-in" id="lotp" type="tel" inputmode="numeric" placeholder="• • • •" maxlength="4" autocomplete="one-time-code" onkeydown="if(event.key===\'Enter\')doVerifyOtp()"></div>' +
       '<div class="small" id="otp-timer-box" style="margin-top:16px">পুনরায় কোড পাঠান (<span id="otp-sec">' + OTP_SECONDS + '</span>s)</div>' +
       '<div style="height:10px"></div>' +
       '<a class="btn" onclick="doVerifyOtp()">ওটিপি যাচাই করুন' + I.arr + '</a>' +
-      '<p class="terms" style="margin-top:16px"><a onclick="editPhone()" style="color:var(--mut);cursor:pointer">ভুল নম্বর দিয়েছেন? নম্বর পরিবর্তন করুন</a></p>';
+      '<p class="terms" style="margin-top:16px"><a onclick="editPhone()" style="color:var(--mut);cursor:pointer">ভুল হয়েছে? ' + changeLabel + ' করুন</a></p>';
   } else if (LOGIN_STEP === 'set_password') {
-    formBody = '<a class="lback" onclick="editPhone()" style="display:inline-flex;cursor:pointer">' + I.back + 'নম্বর পরিবর্তন</a>' +
+    formBody = '<a class="lback" onclick="editPhone()" style="display:inline-flex;cursor:pointer">' + I.back + changeLabel + '</a>' +
       '<div class="h1">পাসওয়ার্ড <em>সেট করুন</em></div>' +
-      '<div class="sub"><span style="color:var(--ink);font-weight:700">+৮৮ ' + esc(PENDING_PHONE) + '</span> নম্বরের জন্য একটি পাসওয়ার্ড বা পিন সেট করুন। পরের বার ওটিপি ছাড়াই এটি দিয়ে সরাসরি লগইন করতে পারবেন।</div>' +
-      '<div class="fl"><label><span>নতুন পাসওয়ার্ড / পিন</span></label><div class="pass-wrap"><input class="in" id="npass" type="password" placeholder="কমপক্ষে ৪ সংখ্যার পাসওয়ার্ড বা পিন" maxlength="20" onkeydown="if(event.key===\'Enter\')doSetPassword()"><button type="button" class="eye-btn" onclick="togglePass(\'npass\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div></div>' +
-      '<div class="fl" style="margin-top:12px"><label><span>পাসওয়ার্ড নিশ্চিত করুন</span></label><div class="pass-wrap"><input class="in" id="cpass" type="password" placeholder="একই পাসওয়ার্ড পুনরায় লিখুন" maxlength="20" onkeydown="if(event.key===\'Enter\')doSetPassword()"><button type="button" class="eye-btn" onclick="togglePass(\'cpass\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div></div>' +
+      '<div class="sub"><span style="color:var(--ink);font-weight:700">' + targetLabel + '</span>-এর জন্য একটি পাসওয়ার্ড বা পিন সেট করুন। পরের বার ওটিপি ছাড়াই এটি দিয়ে সরাসরি লগইন করতে পারবেন।</div>' +
+      '<div class="fl"><label><span>নতুন পাসওয়ার্ড</span></label><div class="pass-wrap"><input class="in" id="npass" type="password" placeholder="কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড দিন" maxlength="64" onkeydown="if(event.key===\'Enter\')doSetPassword()"><button type="button" class="eye-btn" onclick="togglePass(\'npass\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div></div>' +
+      '<div class="fl" style="margin-top:12px"><label><span>পাসওয়ার্ড নিশ্চিত করুন</span></label><div class="pass-wrap"><input class="in" id="cpass" type="password" placeholder="একই পাসওয়ার্ড পুনরায় লিখুন" maxlength="64" onkeydown="if(event.key===\'Enter\')doSetPassword()"><button type="button" class="eye-btn" onclick="togglePass(\'cpass\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div></div>' +
       '<div style="height:12px"></div>' +
       '<a class="btn" onclick="doSetPassword()">পাসওয়ার্ড সেভ ও লগইন করুন' + I.arr + '</a>' +
-      '<p class="terms" style="margin-top:16px"><a onclick="editPhone()" style="color:var(--mut);cursor:pointer">নম্বর পরিবর্তন করতে চান? ফিরে যান</a></p>';
+      '<p class="terms" style="margin-top:16px"><a onclick="editPhone()" style="color:var(--mut);cursor:pointer">' + changeLabel + ' করতে চান? ফিরে যান</a></p>';
   } else if (LOGIN_STEP === 'password') {
-    formBody = '<a class="lback" onclick="editPhone()" style="display:inline-flex;cursor:pointer">' + I.back + 'নম্বর পরিবর্তন</a>' +
+    formBody = '<a class="lback" onclick="editPhone()" style="display:inline-flex;cursor:pointer">' + I.back + changeLabel + '</a>' +
       '<div class="h1">পাসওয়ার্ড <em>লিখুন</em></div>' +
-      '<div class="sub"><span style="color:var(--ink);font-weight:700">+৮৮ ' + esc(PENDING_PHONE) + '</span> নম্বরের পাসওয়ার্ড দিয়ে লগইন করুন।</div>' +
+      '<div class="sub"><span style="color:var(--ink);font-weight:700">' + targetLabel + '</span>-এর পাসওয়ার্ড দিয়ে লগইন করুন।</div>' +
       '<div class="fl"><label><span>পাসওয়ার্ড / পিন</span></label><div class="pass-wrap"><input class="in" id="lpass" type="password" placeholder="আপনার পাসওয়ার্ড লিখুন" maxlength="20" onkeydown="if(event.key===\'Enter\')doLoginPassword()"><button type="button" class="eye-btn" onclick="togglePass(\'lpass\',this)" aria-label="পাসওয়ার্ড দেখুন" title="পাসওয়ার্ড দেখুন">' + I.eye + '</button></div></div>' +
       '<div style="height:12px"></div>' +
       '<a class="btn" onclick="doLoginPassword()">লগইন করুন' + I.arr + '</a>' +
       '<p class="terms" style="margin-top:18px"><a onclick="doForgotPassword()" style="color:var(--or);font-weight:600;cursor:pointer">পাসওয়ার্ড ভুলে গেছেন? ওটিপি দিয়ে রিসেট করুন</a></p>' +
-      '<p class="terms" style="margin-top:8px"><a onclick="editPhone()" style="color:var(--mut);cursor:pointer">ভুল নম্বর? নম্বর পরিবর্তন করুন</a></p>';
+      '<p class="terms" style="margin-top:8px"><a onclick="editPhone()" style="color:var(--mut);cursor:pointer">ভুল হয়েছে? ' + changeLabel + ' করুন</a></p>';
   } else {
-    formBody = '<a class="lback" data-go="back" style="display:inline-flex">' + I.back + (T('tb2052257', 'ফিরে যান') + '</a><div class="h1">' + T('tda667a11', 'মোবাইল নম্বর *দিন*', 'span') + '</div><div class="sub">' + T('t0fb4f1a1', 'যে নম্বর দিয়ে মেম্বারশিপ নেবেন, সেটা দিন।') + '</div>') +
-      ('<div class="fl"><label><span>' + T('t054b2631', 'মোবাইল নম্বর') + '</span></label><input class="in" id="lphone" type="tel" inputmode="numeric" placeholder="মোবাইল নম্বর লিখুন (যেমন: 01712345678)" maxlength="14" value="' + esc(PENDING_PHONE) + '" onkeydown="if(event.key===\'Enter\')doPhoneSubmit()"></div><div style="height:22px"></div>') +
+    formBody = '<a class="lback" data-go="back" style="display:inline-flex">' + I.back + (T('tb2052257', 'ফিরে যান') + '</a><div class="h1">মোবাইল বা ইমেইল <em>দিন</em></div><div class="sub">যে নম্বর বা ইমেইল দিয়ে মেম্বারশিপ নেবেন, সেটা দিন (প্রবাসী কাস্টমাররা ইমেইল এড্রেস দিয়ে লগইন করতে পারবেন)।</div>') +
+      ('<div class="fl"><label><span>মোবাইল নম্বর অথবা ইমেইল</span><small>যেমন: 017... অথবা name@gmail.com</small></label><input class="in" id="lphone" type="text" placeholder="মোবাইল নম্বর (017...) অথবা ইমেইল এড্রেস" value="' + esc(PENDING_PHONE) + '" onkeydown="if(event.key===\'Enter\')doPhoneSubmit()"></div><div style="height:22px"></div>') +
       ('<a class="btn" onclick="doPhoneSubmit()">' + T('t67d12dbe', 'চালিয়ে যান')) + I.arr + ('</a><p class="terms">' + T('t56007083', 'চালিয়ে গেলে আপনি') + ' <a onclick="openPolicy(\'terms\')" style="color:var(--ink2);cursor:pointer">' + T('tb97fa88f', 'শর্তাবলি') + '</a> ' + T('t098326f9', 'আর') + ' <a onclick="openPolicy(\'privacy\')" style="color:var(--ink2);cursor:pointer">' + T('t419acdf7', 'প্রাইভেসি পলিসি') + '</a> ' + T('ta418880d', 'মেনে নিচ্ছেন') + '</p>');
   }
 
@@ -544,28 +542,40 @@ AFTER.login = function () {
   }
 };
 
+function normAuthInput(raw) {
+  var s = String(raw || '').trim();
+  if (!s) return { val: '', type: '' };
+  if (/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(s)) {
+    return { val: s.toLowerCase(), type: 'email' };
+  }
+  var p = s.replace(/\D/g, '');
+  if (p.indexOf('880') === 0) p = p.slice(2);
+  if (/^01\d{9}$/.test(p)) {
+    return { val: p, type: 'phone' };
+  }
+  return { val: '', type: '' };
+}
+
 function doLogin() {
   doPhoneSubmit();
 }
 
 function doPhoneSubmit() {
   var pInput = $('lphone');
-  var p = (pInput ? pInput.value : PENDING_PHONE).replace(/\D/g, '');
-  if (p.indexOf('880') === 0) p = p.slice(2);
-  if (!/^01\d{9}$/.test(p)) return toast((T('t72203891', '১১ সংখ্যার সঠিক মোবাইল নম্বর দিন')), 1);
-  PENDING_PHONE = p;
+  var raw = pInput ? pInput.value : PENDING_PHONE;
+  var parsed = normAuthInput(raw);
+  if (!parsed.type) {
+    return toast('১১ সংখ্যার মোবাইল নম্বর অথবা সঠিক ইমেইল এড্রেস দিন', 1);
+  }
+  PENDING_PHONE = parsed.val;
   busy(1);
 
-  rpc('check_member_auth', { p_phone: p }).then(function (auth) {
+  rpc('check_member_auth', { p_phone: parsed.val }).then(function (auth) {
     busy(0);
     if (auth && auth.verified && auth.has_password) {
       LOGIN_STEP = 'password';
       renderLogin();
       toast('পাসওয়ার্ড লিখে লগইন করুন');
-    } else if (auth && auth.verified && !auth.has_password) {
-      LOGIN_STEP = 'set_password';
-      renderLogin();
-      toast('আপনার অ্যাকাউন্ট ভেরিফাইড! লগইনের জন্য পাসওয়ার্ড সেট করুন ✓');
     } else {
       doSendOtp();
     }
@@ -586,10 +596,14 @@ function doSendOtp() {
     LOGIN_STEP = 'otp';
     renderLogin();
     startOtpCountdown();
-    toast('আপনার মোবাইলে ৪ ডিজিটের ওটিপি পাঠানো হয়েছে ✓');
+    if (p.indexOf('@') !== -1) {
+      toast('আপনার ইমেইলে ৪ ডিজিটের ওটিপি পাঠানো হয়েছে ✓');
+    } else {
+      toast('আপনার মোবাইলে ৪ ডিজিটের ওটিপি পাঠানো হয়েছে ✓');
+    }
   }).catch(function (e) {
     busy(0);
-    toast(errMsg(e) || 'ওটিপি পাঠাতে সমস্যা হয়েছে। নম্বরটি যাচাই করুন।', 1);
+    toast(errMsg(e) || 'ওটিপি পাঠাতে সমস্যা হয়েছে। তথ্য যাচাই করুন।', 1);
   });
 }
 
@@ -634,7 +648,7 @@ function doVerifyOtp() {
   rpc('verify_member_otp_and_grant', { p_phone: PENDING_PHONE, p_otp: enteredOtp }).then(function (r) {
     busy(0);
     if (!r || !r.ok) {
-      return toast((r && r.err) || 'ভুল ওটিপি কোড! আপনার মোবাইলে আসা কোডটি দিন।', 1);
+      return toast((r && r.err) || 'ভুল ওটিপি কোড! সঠিক কোডটি দিন।', 1);
     }
     PENDING_SETUP_TOKEN = r.setup_token || '';
     clearInterval(OTP_TIMER);
@@ -650,19 +664,20 @@ function doVerifyOtp() {
 function doSetPassword() {
   var np = $('npass') ? $('npass').value : '';
   var cp = $('cpass') ? $('cpass').value : '';
-  if (!np || np.length < 4) {
-    return toast('কমপক্ষে ৪ সংখ্যার পাসওয়ার্ড বা পিন লিখুন', 1);
+  if (!np || np.length < 6) {
+    return toast('কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড লিখুন', 1);
   }
-  if (cp && np !== cp) {
+  if (np !== cp) {
     return toast('দুই ঘরের পাসওয়ার্ড মেলেনি! একই পাসওয়ার্ড দিন', 1);
   }
+  if (!PENDING_SETUP_TOKEN) {
+    return toast('আগে ওটিপি যাচাই করুন', 1);
+  }
   busy(1);
-  getSha256(np).then(function (hash) {
-    return rpc('set_member_password', {
-      p_phone: PENDING_PHONE,
-      p_password_hash: hash,
-      p_setup_token: PENDING_SETUP_TOKEN || null
-    });
+  api('set_password', {
+    phone: PENDING_PHONE,
+    password: np,
+    setup_token: PENDING_SETUP_TOKEN
   }).then(function (r) {
     if (!r || !r.ok) {
       busy(0);
@@ -679,6 +694,8 @@ function doSetPassword() {
       if (meRes && meRes.ok && meRes.member) {
         setMember(meRes.member);
         S.payPending = !!meRes.pending;
+      } else if (r.member) {
+        setMember(r.member);
       } else {
         setMember(PENDING_MEMBER || { phone: PENDING_PHONE, status: 'new', paid: false, verified: true });
       }
@@ -697,9 +714,7 @@ function doLoginPassword() {
   var lp = $('lpass') ? $('lpass').value : '';
   if (!lp) return toast('পাসওয়ার্ড লিখুন', 1);
   busy(1);
-  getSha256(lp).then(function (hash) {
-    return rpc('verify_member_password', { p_phone: PENDING_PHONE, p_password_hash: hash });
-  }).then(function (r) {
+  api('login_password', { phone: PENDING_PHONE, password: lp }).then(function (r) {
     if (!r || !r.ok) {
       busy(0);
       toast((r && r.err) || 'ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন বা রিসেট করুন', 1);
@@ -714,6 +729,8 @@ function doLoginPassword() {
       if (meRes && meRes.ok && meRes.member) {
         setMember(meRes.member);
         S.payPending = !!meRes.pending;
+      } else if (r.member) {
+        setMember(r.member);
       } else {
         setMember({ phone: PENDING_PHONE, status: 'new', paid: false, verified: true });
       }
@@ -735,7 +752,11 @@ function doForgotPassword() {
     LOGIN_STEP = 'otp';
     renderLogin();
     startOtpCountdown();
-    toast('পাসওয়ার্ড রিসেট করতে মোবাইলে ওটিপি পাঠানো হয়েছে ✓');
+    if (PENDING_PHONE && PENDING_PHONE.indexOf('@') !== -1) {
+      toast('পাসওয়ার্ড রিসেট করতে ইমেইলে ওটিপি পাঠানো হয়েছে ✓');
+    } else {
+      toast('পাসওয়ার্ড রিসেট করতে মোবাইলে ওটিপি পাঠানো হয়েছে ✓');
+    }
   }).catch(function (e) {
     busy(0);
     toast(errMsg(e) || 'ওটিপি পাঠাতে সমস্যা হয়েছে', 1);
@@ -867,6 +888,7 @@ function confirmPayStart() {
   busy(1);
   api('pay_start', { phone: S.phone }).then(function (r) {
     if (!r.ok) { busy(0); return toast(r.err, 1); }
+    if (!r.url || !/^https:\/\//i.test(String(r.url))) { busy(0); return toast('অবৈধ পেমেন্ট লিংক পাওয়া গেছে', 1); }
     location.href = r.url;
   }).catch(function (e) { busy(0); toast(errMsg(e), 1); });
 }
@@ -1067,8 +1089,8 @@ V.guide = function () {
   var vid = '<div class="vid">' + (id ? '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?rel=0&modestbranding=1" allow="encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe>' : ('<span class="soon">' + T('tdf3d19d8', 'ভিডিও শীঘ্রই আসছে') + '</span>')) + '</div>';
   var cls = (k.whatsapp ? '<a class="cl" href="' + esc(wa()) + '" target="_blank" rel="noopener"><i class="bi" style="background:#25D366">' + I.wa + ('</i><div><b>' + T('t15f62a30', 'WhatsApp সাপোর্ট') + '</b><small>' + T('t092e4343', 'ডিজাইনে আটকে গেলে মেসেজ দিন') + '</small></div><u>›</u></a>') : '') +
     (k.call ? '<a class="cl" href="tel:' + esc(k.call) + '"><i class="bi" style="background:#34C77B">' + I.call + ('</i><div><b>' + T('tf32a2f4e', 'কল করুন') + '</b><small>') + esc(k.call_time || '') + '</small></div><u>›</u></a>' : '') +
-    (k.group_link ? '<a class="cl" href="' + esc(k.group_link) + '" target="_blank" rel="noopener"><i class="bi" style="background:#1877F2">' + I.fb + ('</i><div><b>' + T('t9b354e1e', 'ফেসবুক গ্রুপ') + '</b><small>' + T('t1440fc79', 'নিজের বানানো ডিজাইন শেয়ার করুন, মতামত নিন') + '</small></div><u>›</u></a>') : '');
-  var live = k.class_name ? ('<div class="live"><div><em>' + T('t7a8616c6', 'পরের লাইভ ক্লাস') + '</em><b>') + esc(k.class_name) + '</b><small>' + esc(k.class_time || '') + '</small></div>' + (k.class_link ? '<a class="ghost" href="' + esc(k.class_link) + ('" target="_blank" rel="noopener">' + T('tf814b430', 'জয়েন করুন') + '</a>') : '') + '</div>' : '';
+    (k.group_link ? '<a class="cl" href="' + esc(safeHref(k.group_link)) + '" target="_blank" rel="noopener noreferrer"><i class="bi" style="background:#1877F2">' + I.fb + ('</i><div><b>' + T('t9b354e1e', 'ফেসবুক গ্রুপ') + '</b><small>' + T('t1440fc79', 'নিজের বানানো ডিজাইন শেয়ার করুন, মতামত নিন') + '</small></div><u>›</u></a>') : '');
+  var live = k.class_name ? ('<div class="live"><div><em>' + T('t7a8616c6', 'পরের লাইভ ক্লাস') + '</em><b>') + esc(k.class_name) + '</b><small>' + esc(k.class_time || '') + '</small></div>' + (k.class_link ? '<a class="ghost" href="' + esc(safeHref(k.class_link)) + ('" target="_blank" rel="noopener noreferrer">' + T('tf814b430', 'জয়েন করুন') + '</a>') : '') + '</div>' : '';
   return topm() + '<div class="main">' + head(esc(title), esc(k.guide_sub || (T('tcc6099e0', 'নিচের ভিডিওটা একবার দেখে নিন, তাহলেই পুরো অ্যাপ ব্যবহার করতে পারবেন।'))), 1) +
     '<div class="gl">' + vid + '<div><div class="cls">' + instCard() + cls + '</div>' + live + '</div></div></div>' + tabs2('guide');
 };
@@ -1212,8 +1234,14 @@ function clearAllHistory() {
 }
 function sanitizePolicyHtml(raw) {
   var ALLOWED = { P: 1, H2: 1, H3: 1, UL: 1, OL: 1, LI: 1, STRONG: 1, B: 1, EM: 1, I: 1, U: 1, BR: 1, BLOCKQUOTE: 1, HR: 1, A: 1, DIV: 1, SPAN: 1 };
-  var box = document.createElement('div');
-  box.innerHTML = String(raw || '');
+  var box;
+  if (typeof DOMParser !== 'undefined') {
+    box = new DOMParser().parseFromString(String(raw || ''), 'text/html').body;
+  } else {
+    var d = document.implementation.createHTMLDocument('');
+    box = d.body;
+    box.innerHTML = String(raw || '');
+  }
   function cleanNode(node) {
     if (node.nodeType === 3) return document.createTextNode(node.nodeValue || '');
     if (node.nodeType !== 1) return null;
@@ -1329,52 +1357,44 @@ function boot() {
     if (S.c.settings && S.c.settings.meta_pixel_id) initMetaPixel(S.c.settings.meta_pixel_id);
     go(start); if (entry === 'checkout') nav('member');
   }
-  refreshPaySettings(false);
-  rpc('get_public_app_texts').then(function (tr) {
-    if (tr && tr.ok && tr.texts) {
-      TX = tr.texts;
-      APPNAME = T('t9cece10c', 'উদ্যোক্তা গ্রাফিক্স AI');
-      if (S.c) {
-        S.c.texts = tr.texts;
-        try { LS.set('eds_c3', S.c); } catch (e) {}
-      }
-      if (CUR && ['home', 'style', 'guide', 'member', 'login', 'acct', 'setup', 'write', 'ready', 'fix'].indexOf(CUR) > -1) rerender();
-    }
-  }).catch(function () {});
   api('content').then(function (r) {
     if (!r.ok) return toast((T('t9cfa3898', 'সার্ভার:') + ' ') + (r.err || (T('t63de2ba5', 'কন্টেন্ট আসেনি'))), 1);
     var first = !S.c; r = fixImgs(r);
-    if (TX && Object.keys(TX).length) r.texts = Object.assign({}, r.texts || {}, TX);
     S.c = r; TX = r.texts || {}; APPNAME = T('t9cece10c', 'উদ্যোক্তা গ্রাফিক্স AI');
-    LS.set('eds_c3', r); if (first && !CUR) { go(start); if (entry === 'checkout') nav('member'); } else if (['home', 'style', 'guide', 'member', 'login', 'acct'].indexOf(CUR) > -1) rerender();
-    refreshPaySettings(false);
+    if (r.settings) {
+      if (r.settings.meta_pixel_id) initMetaPixel(r.settings.meta_pixel_id);
+      applyAppBrandAssets(r.settings);
+      try {
+        localStorage.setItem('ug_brand_assets', JSON.stringify({
+          site_logo: String(r.settings.site_logo || ''),
+          eps_checkout_banner: String(r.settings.eps_checkout_banner || ''),
+          eps_footer_desktop: String(r.settings.eps_footer_desktop || ''),
+          eps_footer_mobile: String(r.settings.eps_footer_mobile || '')
+        }));
+      } catch (e) {}
+    }
+    LS.set('eds_c3', r);
+    if (first && !CUR) { go(start); if (entry === 'checkout') nav('member'); }
+    else if (['home', 'style', 'guide', 'member', 'login', 'acct'].indexOf(CUR) > -1) rerender();
   }).catch(function (e) { if (!S.c) go('off'); else toast(errMsg(e), 1); });
   if (S.phone && S.tok) {
-    rpc('verify_member_session', { p_phone: S.phone, p_session_token: S.tok }).then(function (sr) {
-      if (!sr || !sr.ok) {
-        ['eds_phone', 'eds_tok', 'eds_m'].forEach(LS.del);
-        S.phone = ''; S.tok = ''; S.member = null;
-        if (S.c) rerender();
-        return;
-      }
-      return api('me', { phone: S.phone, tok: S.tok }).then(function (r) {
-        if (!r || !r.ok) return; if (r.member) setMember(r.member); S.payPending = !!r.pending;
-        rpc('check_member_auth', { p_phone: S.phone }).then(function (auth) {
-          if (auth && S.member) {
-            if (auth.brand_unlocked != null) S.member.brand_unlocked = !!auth.brand_unlocked;
-            if (auth.verified != null) S.member.verified = !!auth.verified;
-            LS.set('eds_m', S.member);
-          }
-          if (S.c && ['home', 'style', 'acct', 'member', 'guide', 'setup'].indexOf(CUR) > -1) rerender();
-        }).catch(function () {});
-        if (S.c && ['home', 'style', 'acct', 'member', 'guide'].indexOf(CUR) > -1) rerender();
-        if (back) { if (r.member && r.member.paid) go('paid'); else if (backFail) { go('member'); toast((T('t5c67b0ef', 'পেমেন্ট হয়নি, টাকা কাটা হয়নি। আবার চেষ্টা করতে পারেন।')), 1); } else go('wait'); return; }
-        if (r.member && r.member.paid && !r.member.brand && S.c && ['home', 'member'].indexOf(CUR) > -1) go('setup');
-      });
+    api('me', { phone: S.phone, tok: S.tok }).then(function (r) {
+      if (!r || !r.ok) return;
+      if (r.member) setMember(r.member);
+      S.payPending = !!r.pending;
+      if (S.c && ['home', 'style', 'acct', 'member', 'guide', 'setup'].indexOf(CUR) > -1) rerender();
+      if (back) { if (r.member && r.member.paid) go('paid'); else if (backFail) { go('member'); toast((T('t5c67b0ef', 'পেমেন্ট হয়নি, টাকা কাটা হয়নি। আবার চেষ্টা করতে পারেন।')), 1); } else go('wait'); return; }
+      if (r.member && r.member.paid && !r.member.brand && S.c && ['home', 'member'].indexOf(CUR) > -1) go('setup');
     }).catch(function () {});
   }
 }
 boot();
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
-  addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+if ('serviceWorker' in navigator) {
+  if (location.protocol === 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+  } else if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    navigator.serviceWorker.getRegistrations().then(function (regs) {
+      regs.forEach(function (r) { r.unregister(); });
+    });
+  }
 }
