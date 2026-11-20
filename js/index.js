@@ -1,5 +1,6 @@
 (function(){
 var U = 'https://jfrpvijkfcsfewtljnah.supabase.co/functions/v1/api';
+var _pendingGuideConfig = null;
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 function conv(s){return esc(s).replace(/\*([^*]+)\*/g,"<em>$1</em>").replace(/\n/g,"<br>")}
 function ok(u){return typeof u==="string"&&/^(\/|https?:\/\/|mailto:|tel:|app\.html|#)/i.test(u.trim())}
@@ -34,6 +35,7 @@ function applyLandingConfig(cfg) {
   // 2. Hero Section
   if (cfg.hero) {
     var h = cfg.hero;
+    _pendingGuideConfig = h;
     var badge = document.querySelector('.hero .badge');
     if (badge) {
       if (h.badge) {
@@ -59,12 +61,35 @@ function applyLandingConfig(cfg) {
 
     var ghBtn = document.querySelector('.hero .cta a.btn.gh');
     if (ghBtn) {
-      if (h.sec_btn_text) ghBtn.innerHTML = conv(h.sec_btn_text);
-      if (h.sec_btn_link && ok(h.sec_btn_link)) ghBtn.setAttribute('href', h.sec_btn_link);
+      var secText = typeof h.sec_btn_text === 'string' ? h.sec_btn_text.trim() : (h.sec_btn_text ? String(h.sec_btn_text).trim() : '');
+      if (!secText) {
+        ghBtn.style.display = 'none';
+      } else {
+        ghBtn.style.display = '';
+        ghBtn.innerHTML = conv(secText);
+        if (h.sec_btn_link && ok(h.sec_btn_link)) ghBtn.setAttribute('href', h.sec_btn_link);
+      }
     }
 
     var pnote = document.querySelector('.hero p.pnote');
     if (pnote && h.note) pnote.innerHTML = conv(h.note);
+
+    // 2.05 Hero Guide Video Button & Popup CMS Sync
+    var guideHeroBtn = document.getElementById('heroGuideBtn');
+    if (guideHeroBtn) {
+      if (h.guide_btn_show === false) {
+        guideHeroBtn.style.display = 'none';
+      } else {
+        guideHeroBtn.style.display = '';
+        var bghTitle = guideHeroBtn.querySelector('.bgh-title');
+        if (bghTitle && h.guide_btn_title) bghTitle.textContent = h.guide_btn_title;
+        var bghSub = guideHeroBtn.querySelector('.bgh-sub');
+        if (bghSub && h.guide_btn_sub) bghSub.textContent = h.guide_btn_sub;
+      }
+    }
+    if (typeof window.__setGuideVideoConfig === 'function') {
+      window.__setGuideVideoConfig(h);
+    }
 
     // 2.1 Hero Mockup Images (.vis .stack)
     var heroStack = document.querySelector('.hero .vis .stack');
@@ -762,6 +787,244 @@ window.__lpApply=apply; window.__lpApplyConfig=applyLandingConfig;
     setTimeout(function () { try { mo.disconnect(); } catch (e) {} }, 15000);
   }
 })();
+// --- মেম্বারশিপ গাইড ভিডিও মডাল ও স্ক্রল প্রম্পট কন্ট্রোলার ---
+(function initGuideVideoModal() {
+  var modal = document.getElementById('guideModal');
+  var closeBtn = document.getElementById('guideModalClose');
+  var ctaBtn = document.getElementById('guideModalCta');
+  var videoBox = document.getElementById('guideVideoBox');
+  var heroBtn = document.getElementById('heroGuideBtn');
+  var scrollPrompt = document.getElementById('guideScrollPrompt');
+  var promptPlayBtn = document.getElementById('gspPlayBtn');
+  var promptDismissBtn = document.getElementById('gspDismissBtn');
+
+  if (!modal || !videoBox) return;
+
+  var currentVideoUrl = '';
+  var isPopupEnabled = true;
+  var isOpen = false;
+
+  function extractYtId(u) {
+    var m = String(u || '').match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);
+    return m ? m[1] : '';
+  }
+
+  function isDirectVideo(u) {
+    return /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(String(u || '').trim());
+  }
+
+  window.__setGuideVideoConfig = function(h) {
+    if (!h) return;
+    if (h.guide_video_url) currentVideoUrl = h.guide_video_url.trim();
+    if (h.guide_popup_show !== undefined) isPopupEnabled = !!h.guide_popup_show;
+    if (isPopupEnabled && !promptShown && !isOpen) {
+      var st = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      if (st > 160) triggerScrollPrompt();
+    }
+  };
+
+  if (_pendingGuideConfig) {
+    window.__setGuideVideoConfig(_pendingGuideConfig);
+  } else if (typeof currentLandingConfig !== 'undefined' && currentLandingConfig && currentLandingConfig.hero) {
+    window.__setGuideVideoConfig(currentLandingConfig.hero);
+  }
+
+  function renderVideoPlayer() {
+    var url = currentVideoUrl;
+    var yt = extractYtId(url);
+    if (yt) {
+      videoBox.innerHTML = '<iframe class="guide-video-iframe" src="https://www.youtube-nocookie.com/embed/' + yt + '?autoplay=1&playsinline=1&rel=0&modestbranding=1&controls=1&iv_load_policy=3&fs=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen="true" style="width:100%;height:100%;border:0"></iframe>';
+    } else if (isDirectVideo(url) || (url && url.indexOf('res.cloudinary.com') > -1)) {
+      videoBox.innerHTML = '<video class="guide-video-player" src="' + esc(url) + '" controls autoplay playsinline style="width:100%;height:100%;object-fit:cover;background:#000"></video>';
+    } else if (url && ok(url)) {
+      videoBox.innerHTML = '<iframe class="guide-video-iframe" src="' + esc(url) + '" allow="autoplay; fullscreen" allowfullscreen="true" style="width:100%;height:100%;border:0"></iframe>';
+    } else {
+      videoBox.innerHTML = '<div class="guide-video-placeholder"><div class="gvp-play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></div><p style="font-weight:700;font-size:16px;margin:8px 0 4px">Shorts ভিডিও (৯:১৬)</p><small style="color:var(--mut)">অ্যাডমিন থেকে ভিডিও লিংক যুক্ত করলেই এখানে নিজে চালু হবে।</small></div>';
+    }
+  }
+
+  function openModal() {
+    isOpen = true;
+    modal.hidden = false;
+    void modal.offsetWidth;
+    modal.classList.add('active');
+    document.body.classList.add('guide-modal-open');
+    renderVideoPlayer();
+    dismissPrompt(false);
+
+    try {
+      var alapWidgets = document.querySelectorAll('alapai-chat, .alapai-chat-button, #alapai-widget, [class*="alapai"]');
+      for (var i = 0; i < alapWidgets.length; i++) {
+        alapWidgets[i].style.setProperty('display', 'none', 'important');
+      }
+      var bodyKids = document.body ? document.body.children : [];
+      for (var j = 0; j < bodyKids.length; j++) {
+        var bk = bodyKids[j];
+        if (bk && bk.shadowRoot && (bk.shadowRoot.querySelector('.alapai-chat-button') || bk.shadowRoot.querySelector('[class*="alapai"]'))) {
+          bk.style.setProperty('display', 'none', 'important');
+        }
+      }
+      var waBtn = document.querySelector('.wa');
+      if (waBtn) waBtn.style.setProperty('display', 'none', 'important');
+    } catch (e) {}
+
+    try {
+      history.pushState({ ugGuideModal: true }, '');
+    } catch (e) {}
+  }
+
+  function closeModal(skipHistory) {
+    if (!isOpen) return;
+    isOpen = false;
+    modal.classList.remove('active');
+    document.body.classList.remove('guide-modal-open');
+
+    try {
+      var alapWidgets = document.querySelectorAll('alapai-chat, .alapai-chat-button, #alapai-widget, [class*="alapai"]');
+      for (var i = 0; i < alapWidgets.length; i++) {
+        alapWidgets[i].style.removeProperty('display');
+      }
+      var bodyKids = document.body ? document.body.children : [];
+      for (var j = 0; j < bodyKids.length; j++) {
+        var bk = bodyKids[j];
+        if (bk && bk.shadowRoot && (bk.shadowRoot.querySelector('.alapai-chat-button') || bk.shadowRoot.querySelector('[class*="alapai"]'))) {
+          bk.style.removeProperty('display');
+        }
+      }
+      var waBtn = document.querySelector('.wa');
+      if (waBtn) waBtn.style.removeProperty('display');
+    } catch (e) {}
+
+    setTimeout(function() {
+      if (!isOpen) {
+        modal.hidden = true;
+        videoBox.innerHTML = '';
+      }
+    }, 250);
+
+    if (!skipHistory) {
+      if (history.state && history.state.ugGuideModal) {
+        try { history.back(); } catch (e) {}
+      }
+    }
+  }
+
+  if (heroBtn) {
+    heroBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      openModal();
+    });
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      closeModal();
+    });
+  }
+
+  if (ctaBtn) {
+    ctaBtn.addEventListener('click', function() {
+      closeModal();
+    });
+  }
+
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) {
+      closeModal();
+    }
+  });
+
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && isOpen) {
+      closeModal();
+    }
+  });
+
+  window.addEventListener('popstate', function(e) {
+    if (isOpen) {
+      closeModal(true);
+    }
+  });
+
+  // --- Scroll Prompt Card Logic ---
+  // Clear legacy permanent localStorage flag from previous test versions
+  try {
+    localStorage.removeItem('ug_guide_dismissed');
+  } catch (e) {}
+
+  var hasPromptDismissed = false;
+  try {
+    hasPromptDismissed = sessionStorage.getItem('ug_guide_dismissed') === '1';
+  } catch (e) {}
+
+  function dismissPrompt(saveStorage) {
+    if (scrollPrompt) {
+      scrollPrompt.classList.remove('show');
+      setTimeout(function() {
+        if (!scrollPrompt.classList.contains('show')) {
+          scrollPrompt.hidden = true;
+          scrollPrompt.setAttribute('hidden', '');
+        }
+      }, 350);
+    }
+    if (saveStorage !== false) {
+      hasPromptDismissed = true;
+      try {
+        sessionStorage.setItem('ug_guide_dismissed', '1');
+      } catch (e) {}
+    }
+  }
+
+  if (promptDismissBtn) {
+    promptDismissBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dismissPrompt(true);
+    });
+  }
+
+  if (promptPlayBtn) {
+    promptPlayBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      dismissPrompt(true);
+      openModal();
+    });
+  }
+
+  var promptShown = false;
+  function triggerScrollPrompt() {
+    if (promptShown || hasPromptDismissed || !isPopupEnabled || isOpen) return;
+    promptShown = true;
+    if (scrollPrompt) {
+      scrollPrompt.hidden = false;
+      scrollPrompt.removeAttribute('hidden');
+      scrollPrompt.setAttribute('aria-hidden', 'false');
+      void scrollPrompt.offsetWidth;
+      scrollPrompt.classList.add('show');
+    }
+  }
+
+  function checkScroll() {
+    if (promptShown || hasPromptDismissed || !isPopupEnabled || isOpen) return;
+    var st = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    if (st > 160) {
+      triggerScrollPrompt();
+    }
+  }
+
+  window.addEventListener('scroll', checkScroll, { passive: true });
+  document.addEventListener('scroll', checkScroll, { passive: true });
+
+  setTimeout(function() {
+    if (!promptShown && !hasPromptDismissed && isPopupEnabled && !isOpen) {
+      var st = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      if (st > 100) triggerScrollPrompt();
+    }
+  }, 2500);
+})();
+
 if ('serviceWorker' in navigator) {
   if (location.protocol === 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
     window.addEventListener('load', function () {

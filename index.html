@@ -11,7 +11,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="images/icon-192.png">
 <link rel="icon" type="image/png" href="images/logos/logo.png">
-<link rel="stylesheet" href="css/index.css">
+<link rel="stylesheet" href="css/index.css?v=2.3">
 </head>
 <body class="notranslate" translate="no">
 <!-- ১. হেডার ও নেভিগেশন বার -->
@@ -27,7 +27,7 @@
 <a class="badge" href="#reviews"><i></i><span data-lp="L352c7e19">কাস্টমারদের রিভিউ দেখুন</span></a>
 <h1 data-lp="L9a6b7ddb">মাত্র <em>১ টাকায়</em> আপনার ব্র্যান্ডের<br class="db"/> প্রফেশনাল গ্রাফিক ডিজাইন</h1>
 <p class="sub" data-lp="L77fd1d32">নতুন উদ্যোক্তার প্রতিদিনের পোস্ট এখন সহজ। পছন্দের স্টাইল বাছুন, দুই লাইন লিখুন, কাস্টমাইজড কমান্ড কপি করে ChatGPT-তে দিন।</p>
-<div class="cta"><a class="btn pri" href="#price"><span data-lp="Lbc82fc73">মেম্বারশিপ নিন</span><svg aria-hidden="true" viewbox="0 0 20 20"><path d="M4 10h11m-4-4.5L15.5 10 11 14.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></a><a class="btn gh" data-lp="L3caca433" href="/app/home">অ্যাপটা ঘুরে দেখুন</a></div>
+<div class="cta"><a class="btn pri" href="#price"><span data-lp="Lbc82fc73">মেম্বারশিপ নিন</span><svg aria-hidden="true" viewbox="0 0 20 20"><path d="M4 10h11m-4-4.5L15.5 10 11 14.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg></a><button type="button" class="btn-guide-hero" id="heroGuideBtn" aria-label="কীভাবে কিনবেন? ভিডিও দেখুন"><span class="bgh-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></span><span class="bgh-text"><b class="bgh-title">কীভাবে কিনবেন? ভিডিও দেখুন</b><small class="bgh-sub">১ মিনিটের সহজ গাইড</small></span></button><a class="btn gh dsk-only-gh" data-lp="L3caca433" href="/app/home">অ্যাপটা ঘুরে দেখুন</a></div>
 <p class="pnote" data-lp="L1dfa3d6a">৳৩৯৯ / বছর · অটোমেটিক পেমেন্ট · সাথে সাথে চালু</p>
 <aside aria-label="জেনে রাখুন" class="notice dsk"><span aria-hidden="true" class="ni">i</span><p><b data-lp="Lfc6a358a">জেনে রাখুন:</b> <span data-lp="L363a0682">ডিজাইন একটা ক্রিয়েটিভ স্কিল, কোনো টুলে একে বেঁধে রাখা যায় না। উদ্যোক্তা গ্রাফিক্স AI ডিজাইনারের বিকল্প না। এটা বানানো হয়েছে নতুন উদ্যোক্তাদের জন্য, যারা সুন্দর ডিজাইনের অভাবে সোশ্যাল মিডিয়ায় নিজের প্রোডাক্ট আর ব্র্যান্ড ঠিকমতো তুলে ধরতে পারছেন না। তাদের প্রতিদিনের কাজ সহজ করাই আমাদের উদ্দেশ্য।</span></p></aside>
 </div>
@@ -112,8 +112,46 @@
 </div>
 <div class="wrap epsf"><picture><source media="(min-width:900px)" srcset="images/eps-footer-desktop.png"/><img alt="Pay with Visa, Mastercard, bKash, Nagad, Rocket and more, verified by EPS" loading="lazy" src="images/eps-footer-mobile.png"/></picture></div></footer>
 <a aria-label="WhatsApp-এ মেসেজ করুন" class="wa" data-lph="L2cf496e7" href="https://wa.me/8801978376462" rel="noopener" target="_blank" title="WhatsApp-এ সরাসরি কথা বলুন"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2a8.2 8.2 0 01-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1112 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 01-3.3-2.9c-.3-.4.3-.4.7-1.4.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 00-.7.3 3 3 0 00-.9 2.2 5.2 5.2 0 001.1 2.7 11.8 11.8 0 004.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 001.7-1.2 2.2 2.2 0 00.2-1.2c-.1-.1-.3-.2-.5-.3z" fill="currentColor"></path></svg><span>WhatsApp সাপোর্ট</span></a>
+<!-- মেম্বারশিপ গাইড ভিডিও মডাল (Shorts / Reels 9:16 Style) -->
+<div class="guide-modal-backdrop" id="guideModal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="মেম্বারশিপ নেওয়ার নিয়ম">
+  <div class="guide-modal-wrap">
+    <button type="button" class="guide-modal-close-floating" id="guideModalClose" aria-label="বন্ধ করুন">
+      <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+    <div class="guide-video-box" id="guideVideoBox">
+      <div class="guide-video-placeholder" id="guideVideoPlaceholder">
+        <div class="gvp-play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg></div>
+        <p>Shorts ভিডিও (৯:১৬)<br><small>ভিডিও লোড হচ্ছে…</small></p>
+      </div>
+    </div>
+    <div class="guide-modal-bottom">
+      <a class="btn pri guide-cta-btn" href="#price" id="guideModalCta">
+        <span>মেম্বারশিপ নিন</span>
+        <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M4 10h11m-4-4.5L15.5 10 11 14.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- স্ক্রল প্রম্পট কার্ড (Scroll Notification Prompt) -->
+<div class="guide-scroll-prompt" id="guideScrollPrompt" hidden aria-hidden="true">
+  <div class="gsp-content">
+    <div class="gsp-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8" fill="currentColor"></polygon></svg>
+    </div>
+    <div class="gsp-text">
+      <b class="gsp-title">মেম্বারশিপ কীভাবে নেবেন?</b>
+      <span class="gsp-sub">সহজ ১ মিনিটের ভিডিও দেখে পেমেন্ট করুন</span>
+    </div>
+  </div>
+  <div class="gsp-actions">
+    <button type="button" class="gsp-btn play" id="gspPlayBtn">চালু করুন</button>
+    <button type="button" class="gsp-btn dismiss" id="gspDismissBtn">না, আমি জানি</button>
+  </div>
+</div>
+
 <!-- ১১. স্ক্রিপ্ট: লাইভ কনটেন্ট সিঙ্ক -->
-<script src="js/index.js"></script>
+<script src="js/index.js?v=2.3"></script>
 <!-- ১২. আলাপ AI লাইভ চ্যাট উইজেট -->
 <script src="https://alap-prod.sgp1.cdn.digitaloceanspaces.com/chat/widget-loader.js" data-client-id="cfe62d3e-db63-47bd-aceb-75b569d2c592" async></script>
 </body>

@@ -2692,7 +2692,12 @@ var DEFAULT_LANDING_CONFIG = {
     "img_right": "images/hero/hero-right.jpg",
     "notice_show": true,
     "notice_title": "জেনে রাখুন:",
-    "notice_text": "ডিজাইন একটা ক্রিয়েটিভ স্কিল, কোনো টুলে একে বেঁধে রাখা যায় না। উদ্যোক্তা গ্রাফিক্স AI ডিজাইনারের বিকল্প না। এটা বানানো হয়েছে নতুন উদ্যোক্তাদের জন্য, যারা সুন্দর ডিজাইনের অভাবে সোশ্যাল মিডিয়ায় নিজের প্রোডাক্ট আর ব্র্যান্ড ঠিকমতো তুলে ধরতে পারছেন না। তাদের প্রতিদিনের কাজ সহজ করাই আমাদের উদ্দেশ্য।"
+    "notice_text": "ডিজাইন একটা ক্রিয়েটিভ স্কিল, কোনো টুলে একে বেঁধে রাখা যায় না। উদ্যোক্তা গ্রাফিক্স AI ডিজাইনারের বিকল্প না। এটা বানানো হয়েছে নতুন উদ্যোক্তাদের জন্য, যারা সুন্দর ডিজাইনের অভাবে সোশ্যাল মিডিয়ায় নিজের প্রোডাক্ট আর ব্র্যান্ড ঠিকমতো তুলে ধরতে পারছেন না। তাদের প্রতিদিনের কাজ সহজ করাই আমাদের উদ্দেশ্য।",
+    "guide_btn_show": true,
+    "guide_popup_show": true,
+    "guide_video_url": "",
+    "guide_btn_title": "কীভাবে কিনবেন? ভিডিও দেখুন",
+    "guide_btn_sub": "১ মিনিটের সহজ গাইড"
   },
   "pains": [
     {
@@ -2998,10 +3003,32 @@ function landingHeroHtml(h) {
       '<div class="fl"><label><span>বাটন ১ এর লিংক</span></label><input class="in" id="lh_btn_lk" value="' + esc(h.btn_link || '#price') + '" oninput="A.landingConfig.hero.btn_link=this.value;setDirty()"></div>' +
     '</div>' +
     '<div class="fg2">' +
-      '<div class="fl"><label><span>বাটন ২ (Secondary CTA)</span></label><input class="in" id="lh_sec_btn" value="' + esc(h.sec_btn_text || '') + '" oninput="A.landingConfig.hero.sec_btn_text=this.value;setDirty()"></div>' +
+      '<div class="fl"><label><span>বাটন ২ (Secondary CTA)</span><small>খালি রাখলে বন্ধ থাকবে</small></label><input class="in" id="lh_sec_btn" value="' + esc(h.sec_btn_text || '') + '" placeholder="খালি রাখলে বাটনটি দেখাবে না" oninput="A.landingConfig.hero.sec_btn_text=this.value;setDirty()"></div>' +
       '<div class="fl"><label><span>বাটন ২ এর লিংক</span></label><input class="in" id="lh_sec_btn_lk" value="' + esc(h.sec_btn_link || '/app/home') + '" oninput="A.landingConfig.hero.sec_btn_link=this.value;setDirty()"></div>' +
     '</div>' +
     '<div class="fl"><label><span>প্রাইস নোট (ফুটনোট)</span></label><input class="in" id="lh_note" value="' + esc(h.note || '') + '" oninput="A.landingConfig.hero.note=this.value;setDirty()"></div>' +
+    // --- Hero Membership Guide Video & Scroll Popup Controls ---
+    '<div class="pn" style="background:var(--card2);border:1px solid var(--line);margin:18px 0;padding:16px;border-radius:8px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<div><b style="font-size:15px;color:var(--ink);display:block">মেম্বারশিপ গাইড ও পেমেন্ট ভিডিও (Video Popup)</b>' +
+        '<p style="color:var(--mut);font-size:12px;margin:2px 0 0">নন-টেক উদ্যোক্তাদের জন্য কীভাবে মেম্বারশিপ নিতে হয় তার ভিডিও টিউটোরিয়াল বাটন ও স্ক্রল প্রম্পট।</p></div>' +
+      '</div>' +
+      '<div class="fg2" style="margin-top:12px">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink);cursor:pointer">' +
+          '<input type="checkbox" id="lh_g_btn_show" ' + (h.guide_btn_show !== false ? 'checked' : '') + ' onchange="A.landingConfig.hero.guide_btn_show=this.checked;setDirty()">' +
+          '<span>হিরো সেকশনে ভিডিও বাটন দেখান</span>' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink);cursor:pointer">' +
+          '<input type="checkbox" id="lh_g_pop_show" ' + (h.guide_popup_show !== false ? 'checked' : '') + ' onchange="A.landingConfig.hero.guide_popup_show=this.checked;setDirty()">' +
+          '<span>স্ক্রল করলে নিচে ভিডিও প্রম্পট দেখান</span>' +
+        '</label>' +
+      '</div>' +
+      '<div class="fl" style="margin-top:12px"><label><span>গাইড ভিডিওর লিঙ্ক (YouTube বা Shorts বা MP4 ভিডিওর URL)</span><small>যেমন: https://www.youtube.com/shorts/... বা https://youtu.be/...</small></label><input class="in" id="lh_guide_vid" value="' + esc(h.guide_video_url || '') + '" placeholder="যেমন: https://www.youtube.com/shorts/..." oninput="A.landingConfig.hero.guide_video_url=this.value.trim();setDirty()"></div>' +
+      '<div class="fg2" style="margin-top:10px">' +
+        '<div class="fl"><label><span>ভিডিও বাটনের বড় লেখা</span></label><input class="in" id="lh_guide_btn_t" value="' + esc(h.guide_btn_title || 'কীভাবে কিনবেন? ভিডিও দেখুন') + '" oninput="A.landingConfig.hero.guide_btn_title=this.value;setDirty()"></div>' +
+        '<div class="fl"><label><span>ভিডিও বাটনের ছোট লেখা</span></label><input class="in" id="lh_guide_btn_s" value="' + esc(h.guide_btn_sub || '১ মিনিটের সহজ গাইড') + '" oninput="A.landingConfig.hero.guide_btn_sub=this.value;setDirty()"></div>' +
+      '</div>' +
+    '</div>' +
     // --- Hero Visual Mockup Images ---
     '<div class="pn" style="background:var(--card2);border:1px solid var(--line);margin:18px 0;padding:16px;border-radius:8px">' +
       '<b style="font-size:15px;color:var(--ink);display:block;margin-bottom:4px">হিরো ব্যানার মকআপ ছবি (Hero Images)</b>' +
